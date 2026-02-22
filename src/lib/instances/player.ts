@@ -121,6 +121,18 @@ export class Player {
             if (event.key === "a") this.input_direction.left = false;
             if (event.key === "d") this.input_direction.right = false;
         });
+
+        window.addEventListener("mousemove", (event) => {
+            if (document.pointerLockElement !== this.render.renderer.domElement) return;
+
+            const sensitivity = 0.002;
+
+            this.rotY -= event.movementX * sensitivity;
+            this.rotX -= event.movementY * sensitivity;
+
+            const maxPitch = Math.PI / 2 - 0.01;
+            this.rotX = Math.max(-maxPitch, Math.min(maxPitch, this.rotX));
+        });
     }
 
     public jump() {
