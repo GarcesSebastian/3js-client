@@ -55,16 +55,35 @@ export class Render3JS {
         });
 
         this.fpsCounter = document.createElement("div");
-        this.fpsCounter.style.position = "absolute";
-        this.fpsCounter.style.top = "10px";
-        this.fpsCounter.style.right = "10px";
-        this.fpsCounter.style.padding = "5px 10px";
-        this.fpsCounter.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-        this.fpsCounter.style.borderRadius = "5px";
-        this.fpsCounter.style.fontFamily = "monospace";
-        this.fpsCounter.style.fontSize = "18px";
-        this.fpsCounter.style.fontWeight = "bold";
-        this.fpsCounter.style.zIndex = "100";
+        this.fpsCounter.className = "fps-counter";
+
+        const style = document.createElement("style");
+        style.textContent = `
+            .fps-counter {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                padding: 4px 8px;
+                background: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(4px);
+                border-radius: 6px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 14px;
+                font-weight: 800;
+                z-index: 100;
+                pointer-events: none;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            @media (max-width: 768px) {
+                .fps-counter {
+                    font-size: 10px;
+                    padding: 2px 6px;
+                    top: 5px;
+                    right: 5px;
+                }
+            }
+        `;
+        document.head.appendChild(style);
         target.appendChild(this.fpsCounter);
 
         this.physics = new Physics(this);

@@ -15,7 +15,8 @@ export default function Home() {
     base: { x: 0, y: 0 },
     current: { x: 0, y: 0 }
   });
-  const [joystickUI, setJoystickUI] = useState({ x: 0, y: 0, visible: false });
+
+  const [joystickUI, setJoystickUI] = useState({ currentX: 0, currentY: 0 });
 
   const touchState = useRef({
     lastX: 0,
@@ -42,16 +43,20 @@ export default function Home() {
 
   const onJoystickStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
     joystickRef.current = {
       active: true,
-      base: { x: touch.clientX, y: touch.clientY },
+      base: { x: centerX, y: centerY },
       current: { x: touch.clientX, y: touch.clientY }
     };
-    setJoystickUI({ x: touch.clientX, y: touch.clientY, visible: true });
   };
 
   const onJoystickMove = (e: React.TouchEvent) => {
     if (!joystickRef.current.active) return;
+
     const touch = Array.from(e.touches).find(t => {
       const dx = t.clientX - joystickRef.current.base.x;
       const dy = t.clientY - joystickRef.current.base.y;
@@ -61,7 +66,7 @@ export default function Home() {
     const dx = touch.clientX - joystickRef.current.base.x;
     const dy = touch.clientY - joystickRef.current.base.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const maxDist = 50;
+    const maxDist = 40;
 
     let moveX = dx;
     let moveY = dy;
@@ -77,7 +82,7 @@ export default function Home() {
       player.input_direction.joystickY = -(moveY / maxDist);
     }
 
-    setJoystickUI(prev => ({ ...prev, currentX: moveX, currentY: moveY }));
+    setJoystickUI({ currentX: moveX, currentY: moveY });
   };
 
   const onJoystickEnd = () => {
@@ -87,7 +92,7 @@ export default function Home() {
       player.input_direction.joystickX = 0;
       player.input_direction.joystickY = 0;
     }
-    setJoystickUI(prev => ({ ...prev, visible: false }));
+    setJoystickUI({ currentX: 0, currentY: 0 });
   };
 
   const onTouchCameraStart = (e: React.TouchEvent) => {
@@ -112,7 +117,7 @@ export default function Home() {
 
     const player = render?.room.getPlayers().find(p => p.hasController);
     if (player) {
-      player.updateRotation(deltaX * 0.5, deltaY * 0.5);
+      player.updateRotation(deltaX * 0.7, deltaY * 0.7);
     }
 
     touchState.current.lastX = touch.clientX;
@@ -140,12 +145,12 @@ export default function Home() {
 
       {!gameJoined && (
         <div className="relative z-10 flex flex-col items-center justify-center w-full h-full bg-black/30 backdrop-blur-sm">
-          <div className="flex flex-col items-center space-y-8 p-12 rounded-3xl backdrop-blur-xl bg-black/40 border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-500">
+          <div className="flex flex-col items-center space-y-6 p-8 sm:p-12 rounded-3xl backdrop-blur-xl bg-black/40 border border-white/10 shadow-2xl animate-in fade-in zoom-in duration-500 w-[90%] max-w-md">
             <div className="text-center space-y-2">
-              <h1 className="text-6xl font-black tracking-tighter bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent italic tracking-tight">
+              <h1 className="text-4xl sm:text-6xl font-black tracking-tighter bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent italic tracking-tight">
                 3JS WORLD
               </h1>
-              <p className="text-purple-400/80 text-sm uppercase tracking-[0.3em] font-bold">Unirse al servidor</p>
+              <p className="text-purple-400/80 text-[10px] sm:text-sm uppercase tracking-[0.3em] font-bold text-nowrap">Unirse al servidor</p>
             </div>
             <div className="w-full space-y-4">
               <input
@@ -154,11 +159,11 @@ export default function Home() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-                className="w-full px-6 py-4 bg-black/60 border border-white/10 rounded-xl outline-none text-center text-lg focus:border-purple-500/50"
+                className="w-full px-6 py-3 sm:py-4 bg-black/60 border border-white/10 rounded-xl outline-none text-center text-base sm:text-lg focus:border-purple-500/50"
               />
               <button
                 onClick={handleJoin}
-                className="w-full bg-white text-black font-bold py-4 rounded-xl hover:scale-105 transition-transform"
+                className="w-full bg-white text-black font-bold py-3 sm:py-4 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
               >
                 ENTRAR AL MUNDO
               </button>
@@ -171,21 +176,18 @@ export default function Home() {
         <div className="fixed inset-0 pointer-events-none z-20 flex flex-col items-center justify-center">
           <div className="w-2 h-2 bg-white/50 rounded-full border border-black/20" />
 
-          <div className="absolute top-8 left-8 flex flex-col gap-2 min-w-[180px]">
-            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">
-              <div className="flex items-center justify-between mb-2 pb-1 border-b border-white/5">
-                <span className="text-[10px] font-bold text-gray-400 uppercase">Players</span>
-                <span className="text-[10px] font-bold text-purple-400">{players.length}</span>
+          <div className="absolute top-4 sm:top-8 left-4 sm:left-8 flex flex-col gap-2 w-[140px] sm:min-w-[180px]">
+            <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-white/10 shadow-2xl">
+              <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/5">
+                <span className="text-[8px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider">Online</span>
+                <span className="text-[8px] sm:text-[10px] font-bold text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded-full">{players.length}</span>
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-0.5 max-h-[150px] sm:max-h-[300px] overflow-y-auto pr-1">
                 {players.map((plr) => (
-                  <div key={plr?.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${plr?.username === name ? 'bg-white/20 border border-white/10' : ''}`}>
-                    <div className="relative">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      {plr?.username === name && <div className="absolute inset-0 w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />}
-                    </div>
-                    <span className={`text-xs font-medium ${plr?.username === name ? 'text-white' : 'text-white/60'}`}>
-                      {plr?.username || 'Unknown Player'} {plr?.username === name ? '(Tú)' : ''}
+                  <div key={plr?.id} className={`flex items-center gap-1.5 px-1.5 py-1 rounded-lg transition-colors ${plr?.username === name ? 'bg-white/10' : ''}`}>
+                    <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-green-500" />
+                    <span className={`text-[9px] sm:text-xs font-medium truncate ${plr?.username === name ? 'text-white' : 'text-white/60'}`}>
+                      {plr?.username} {plr?.username === name ? '(Tú)' : ''}
                     </span>
                   </div>
                 ))}
@@ -196,35 +198,37 @@ export default function Home() {
           {isMobile && (
             <div className="fixed inset-0 pointer-events-auto overflow-hidden">
               <div
-                className="absolute bottom-12 left-12 w-40 h-40 flex items-center justify-center"
+                className="absolute bottom-6 left-6 w-32 h-32 flex items-center justify-center touch-none"
                 onTouchStart={onJoystickStart}
                 onTouchMove={onJoystickMove}
                 onTouchEnd={onJoystickEnd}
               >
-                <div className="w-32 h-32 rounded-full border-2 border-white/10 bg-white/5 backdrop-blur-md flex items-center justify-center shadow-inner">
-                  {joystickUI.visible && (
-                    <div
-                      className="absolute w-12 h-12 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.4)]"
-                      style={{
-                        transform: `translate(${(joystickUI as any).currentX || 0}px, ${(joystickUI as any).currentY || 0}px)`
-                      }}
-                    />
-                  )}
+                <div className="w-28 h-28 rounded-full border border-white/10 bg-white/5 backdrop-blur-md flex items-center justify-center relative shadow-inner">
+                  <div className="absolute inset-0 rounded-full border border-white/5 pointer-events-none" />
+
+                  <div
+                    className="w-10 h-10 bg-white/90 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-transform duration-75 ease-out flex items-center justify-center"
+                    style={{
+                      transform: `translate(${joystickUI.currentX}px, ${joystickUI.currentY}px)`
+                    }}
+                  >
+                    <div className="w-4 h-4 rounded-full border border-black/10" />
+                  </div>
                 </div>
               </div>
 
               <button
-                className="absolute bottom-16 right-16 w-24 h-24 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 flex items-center justify-center active:scale-90 active:bg-white/20 transition-all shadow-2xl"
+                className="absolute bottom-8 right-8 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 active:bg-white/30 transition-all shadow-xl"
                 onTouchStart={onJump}
               >
-                <span className="font-black text-white/80 tracking-widest text-xs uppercase">Jump</span>
+                <span className="font-bold text-white/90 tracking-widest text-[10px] uppercase">Jump</span>
               </button>
             </div>
           )}
 
           {!isMobile && (
             <div className="absolute bottom-10 px-4 py-1.5 bg-white/5 backdrop-blur-sm rounded-full border border-white/10 text-[10px] text-white/40 uppercase tracking-[0.2em]">
-              WASD • Space • Click to look
+              WASD • Space • Drag right to look
             </div>
           )}
         </div>
