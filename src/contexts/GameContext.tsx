@@ -111,7 +111,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             });
             setPlayers(prev => {
                 const uniquePlayers = [...prev];
-                data.players.forEach(p => {
+                data.players.filter(p => p && p.id).forEach(p => {
                     if (!uniquePlayers.find(up => up.id === p.id)) {
                         uniquePlayers.push(p);
                     }
@@ -134,7 +134,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
     const handleSocketConnectedClient = useCallback((data: { id: string, players: IPlayer[] }) => {
         Cookies.set("SID_SKT", data.id);
-        setPlayers(data.players);
+        setPlayers(data.players.filter(p => p && p.id));
     }, []);
 
     const handlePlayerLeft = useCallback((data: { id: string, username: string }) => {
@@ -159,7 +159,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             });
             setPlayers(prev => {
                 const uniquePlayers = [...prev];
-                pendingPlayers.forEach(p => {
+                pendingPlayers.filter(p => p && p.id).forEach(p => {
                     if (!uniquePlayers.find(up => up.id === p.id)) {
                         uniquePlayers.push(p);
                     }

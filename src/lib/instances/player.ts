@@ -36,7 +36,9 @@ export class Player {
         backward: false,
         left: false,
         right: false,
-        jumpRequested: false
+        jumpRequested: false,
+        joystickX: 0,
+        joystickY: 0
     };
 
     public velocityY: number = 0;
@@ -100,16 +102,12 @@ export class Player {
     public takeDamage(amount: number) {
         if (this.isDead) return;
         this.health = Math.max(0, this.health - amount);
-
         this.events.emitHealth({
             health: this.health,
             maxHealth: this.maxHealth,
             percentage: (this.health / this.maxHealth) * 100
         });
-
-        if (this.health <= 0) {
-            this.die();
-        }
+        if (this.health <= 0) this.die();
     }
 
     private die() {
@@ -124,9 +122,7 @@ export class Player {
             this.checkAndEmitMove();
         } else {
             const dist = this.playerGroup.position.distanceTo(new THREE.Vector3(x, y, z));
-            if (dist > 15) {
-                this.playerGroup.position.set(x, y, z);
-            }
+            if (dist > 15) this.playerGroup.position.set(x, y, z);
             this.targetPosition.set(x, y, z);
         }
     }
@@ -138,45 +134,38 @@ export class Player {
         } else {
             const currentY = this.playerGroup.rotation.y;
             let targetY = y;
-
             while (targetY - currentY > Math.PI) targetY -= Math.PI * 2;
             while (targetY - currentY < -Math.PI) targetY += Math.PI * 2;
-
             this.targetRotation.set(x, targetY, z);
         }
     }
 
-    public getPosition() {
-        return this.playerGroup.position;
-    }
-
-    private onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "w") this.input_direction.forward = true;
-        if (event.key === "s") this.input_direction.backward = true;
-        if (event.key === "a") this.input_direction.left = true;
-        if (event.key === "d") this.input_direction.right = true;
-        if (event.key === " " && !this.input_direction.jumpRequested) {
-            this.input_direction.jumpRequested = true;
-        }
-    };
-
-    private onKeyUp = (event: KeyboardEvent) => {
-        if (event.key === "w") this.input_direction.forward = false;
-        if (event.key === "s") this.input_direction.backward = false;
-        if (event.key === "a") this.input_direction.left = false;
-        if (event.key === "d") this.input_direction.right = false;
-    };
-
-    private onMouseMove = (event: MouseEvent) => {
-        if (document.pointerLockElement !== this.render.renderer.domElement) return;
-
+    public updateRotation(deltaX: number, deltaY: number) {
         const sensitivity = 0.002;
-
-        this.rotY -= event.movementX * sensitivity;
-        this.rotX -= event.movementY * sensitivity;
-
+        this.rotY -= deltaX * sensitivity;
+        this.rotX -= deltaY * sensitivity;
         const maxPitch = Math.PI / 2 - 0.01;
         this.rotX = Math.max(-maxPitch, Math.min(maxPitch, this.rotX));
+    }
+
+    private onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "w") this.input_direction.forward = true;
+        if (e.key === "s") this.input_direction.backward = true;
+        if (e.key === "a") this.input_direction.left = true;
+        if (e.key === "d") this.input_direction.right = true;
+        if (e.key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
+    };
+
+    private onKeyUp = (e: KeyboardEvent) => {
+        if (e.key === "w") this.input_direction.forward = false;
+        if (e.key === "s") this.input_direction.backward = false;
+        if (e.key === "a") this.input_direction.left = false;
+        if (e.key === "d") this.input_direction.right = false;
+    };
+
+    private onMouseMove = (e: MouseEvent) => {
+        if (document.pointerLockElement !== this.render.renderer.domElement) return;
+        this.updateRotation(e.movementX, e.movementY);
     };
 
     private initEvents() {
@@ -192,16 +181,15 @@ export class Player {
         }
     }
 
+    public getPosition() { return this.playerGroup.position; }
+
     public join() {
-        if (!this.render.players.find((p: Player) => p.id === this.id)) {
-            this.render.players.push(this);
-        }
+        if (!this.render.players.find(p => p.id === this.id)) this.render.players.push(this);
     }
 
     public leave() {
-        this.render.players = this.render.players.filter((p: Player) => p.id !== this.id);
+        this.render.players = this.render.players.filter(p => p.id !== this.id);
         this.render.scene.remove(this.playerGroup);
-
         if (this.hasController) {
             this.cameraPivot.remove(this.render.camera);
             window.removeEventListener("keydown", this.onKeyDown);
@@ -214,34 +202,34 @@ export class Player {
         this.leave();
         this.events.clear();
         this.mesh.geometry.dispose();
-        if (Array.isArray(this.mesh.material)) {
-            this.mesh.material.forEach((m: THREE.Material) => m.dispose());
-        } else {
-            this.mesh.material.dispose();
-        }
+        if (Array.isArray(this.mesh.material)) this.mesh.material.forEach(m => m.dispose());
+        else this.mesh.material.dispose();
         this.uiLabel.destroy();
     }
 
     public update(delta: number) {
         this.uiLabel.updateUI(this.name, (this.health / this.maxHealth) * 100);
-
         if (this.isDead) return;
 
         if (this.hasController) {
             this.playerGroup.rotation.y = this.rotY;
             this.cameraPivot.rotation.x = this.rotX;
 
-            const moveX = (this.input_direction.right ? 1 : 0) - (this.input_direction.left ? 1 : 0);
-            const moveZ = (this.input_direction.backward ? 1 : 0) - (this.input_direction.forward ? 1 : 0);
+            let moveX = (this.input_direction.right ? 1 : 0) - (this.input_direction.left ? 1 : 0);
+            let moveZ = (this.input_direction.backward ? 1 : 0) - (this.input_direction.forward ? 1 : 0);
+
+            if (this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0) {
+                moveX = this.input_direction.joystickX;
+                moveZ = -this.input_direction.joystickY;
+            }
 
             const direction = new THREE.Vector3(moveX, 0, moveZ);
-            if (direction.lengthSq() > 0) direction.normalize();
+            if (direction.lengthSq() > 1) direction.normalize();
 
             direction.applyEuler(new THREE.Euler(0, this.playerGroup.rotation.y, 0));
             direction.multiplyScalar(this.speed * delta);
 
             this.playerGroup.position.add(direction);
-
             this.checkAndEmitMove();
         } else {
             const lerpStep = Math.min(1, this.lerpSpeed * delta);
@@ -252,10 +240,8 @@ export class Player {
 
     private checkAndEmitMove() {
         if (!this.hasController) return;
-
         const now = performance.now();
         if (now - this.lastEmitTime < this.emitInterval) return;
-
         const dist = this.playerGroup.position.distanceTo(this.lastEmittedPosition);
         const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY);
 
@@ -263,18 +249,9 @@ export class Player {
             this.lastEmittedPosition.copy(this.playerGroup.position);
             this.lastEmittedRotationY = this.playerGroup.rotation.y;
             this.lastEmitTime = now;
-
             this.events.emitMove({
-                position: {
-                    x: this.playerGroup.position.x,
-                    y: this.playerGroup.position.y,
-                    z: this.playerGroup.position.z
-                },
-                rotation: {
-                    x: 0,
-                    y: this.playerGroup.rotation.y,
-                    z: 0
-                }
+                position: { x: this.playerGroup.position.x, y: this.playerGroup.position.y, z: this.playerGroup.position.z },
+                rotation: { x: 0, y: Number(this.playerGroup.rotation.y.toFixed(3)), z: 0 }
             });
         }
     }
