@@ -1,13 +1,10 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react";
-import { useSocket } from "@/hooks/useSocket";
-import { v4 as uuidv4 } from "uuid";
 import { useGame } from "@/hooks/useGame";
 
 export default function Home() {
-  const { socket } = useSocket();
-  const { initGame, render } = useGame();
+  const { initGame, handleJoinGame, players } = useGame();
   const [gameJoined, setGameJoined] = useState(false);
   const [name, setName] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -16,7 +13,7 @@ export default function Home() {
     if (containerRef.current) {
       initGame(containerRef.current);
     }
-  }, [])
+  }, [initGame])
 
   const handleJoin = () => {
     if (!name.trim()) {
@@ -24,20 +21,8 @@ export default function Home() {
       return;
     }
 
-    if (render && render.room) {
-      const player = render.room.createPlayer({
-        id: uuidv4(),
-        name,
-        hasController: true
-      });
-      render.room.join(player, (player) => {
-        socket?.emit("player:join", {
-          id: player.id,
-          username: player.name
-        });
-      });
-      setGameJoined(true);
-    }
+    handleJoinGame(name);
+    setGameJoined(true);
   };
 
   return (
@@ -49,9 +34,7 @@ export default function Home() {
 
       {!gameJoined && (
         <div className="relative z-10 flex flex-col items-center justify-center w-full h-full bg-black/30 backdrop-blur-sm transition-all duration-700">
-
           <div className="absolute inset-0 bg-radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.6)_100%) pointer-events-none" />
-
           <div className="flex flex-col items-center space-y-8 p-12 rounded-3xl backdrop-blur-xl bg-black/40 border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in duration-500">
             <div className="text-center space-y-2">
               <h1 className="text-6xl font-black tracking-tighter bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent italic drop-shadow-2xl">
@@ -59,7 +42,6 @@ export default function Home() {
               </h1>
               <p className="text-purple-400/80 text-sm uppercase tracking-[0.3em] font-bold">Unirse al servidor</p>
             </div>
-
             <div className="w-full space-y-4">
               <div className="relative group">
                 <input
@@ -73,7 +55,6 @@ export default function Home() {
                 />
                 <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
               </div>
-
               <button
                 onClick={handleJoin}
                 className="group relative w-full overflow-hidden rounded-xl bg-white px-8 py-4 text-black font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-white/10"
@@ -85,7 +66,6 @@ export default function Home() {
                 </span>
               </button>
             </div>
-
             <div className="flex gap-4 pt-4">
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -102,12 +82,26 @@ export default function Home() {
         <div className="fixed inset-0 pointer-events-none z-20 flex flex-col items-center justify-center animate-in fade-in duration-1000">
           <div className="w-2 h-2 bg-white/50 rounded-full border border-black/20" />
 
-          <div className="absolute top-8 left-8 flex items-center gap-3 bg-black/60 backdrop-blur-md px-5 py-2.5 rounded-xl border border-white/10 shadow-2xl">
-            <div className="relative">
-              <div className="w-3 h-3 bg-green-500 rounded-full" />
-              <div className="absolute inset-0 w-3 h-3 bg-green-500 rounded-full animate-ping opacity-75" />
+          <div className="absolute top-8 left-8 flex flex-col gap-2 min-w-[200px]">
+            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 shadow-2xl">
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/5">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Jugadores Online</span>
+                <span className="text-[10px] font-bold text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full">{players.length}</span>
+              </div>
+              <div className="flex flex-col gap-1 max-h-[300px] overflow-y-auto">
+                {players.map((plr) => (
+                  <div key={plr.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${plr.username === name ? 'bg-white/20 border border-white/10' : ''}`}>
+                    <div className="relative">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                      {plr.username === name && <div className="absolute inset-0 w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />}
+                    </div>
+                    <span className={`text-xs font-medium ${plr.username === name ? 'text-white' : 'text-white/60'}`}>
+                      {plr.username} {plr.username === name ? '(Tú)' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <span className="text-sm font-bold tracking-wider text-white/90 uppercase">{name}</span>
           </div>
 
           <div className="absolute bottom-10 flex flex-col items-center gap-2">
