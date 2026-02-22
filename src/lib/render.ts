@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { EventsListener } from "./helpers/EventsListener";
 import { Player } from "./instances/player";
 import { Physics } from "./helpers/Physics";
+import { Room } from "./instances/room";
 
 export class Render3JS {
     public scene: THREE.Scene;
@@ -17,12 +18,13 @@ export class Render3JS {
 
     public players: Player[] = [];
     public physics: Physics;
+    public room: Room;
 
     private fpsCounter: HTMLDivElement;
     private frameCount: number = 0;
     private lastFpsUpdate: number = 0;
 
-    constructor() {
+    constructor(container?: HTMLElement) {
         new EventsListener(this);
 
         this.scene = new THREE.Scene();
@@ -35,13 +37,18 @@ export class Render3JS {
 
         this.renderer = new THREE.WebGLRenderer({
             antialias: true,
-            powerPreference: "high-performance"
+            powerPreference: "high-performance",
+            alpha: true
         })
         this.renderer.setSize(this.width, this.height);
         this.renderer.setPixelRatio(window.devicePixelRatio)
 
-        document.body.appendChild(this.renderer.domElement);
-        document.body.style.cursor = "none";
+        const target = container || document.body;
+        target.appendChild(this.renderer.domElement);
+
+        if (!container) {
+            document.body.style.cursor = "none";
+        }
 
         this.renderer.domElement.addEventListener("click", () => {
             this.renderer.domElement.requestPointerLock();
@@ -57,31 +64,11 @@ export class Render3JS {
         this.fpsCounter.style.fontFamily = "monospace";
         this.fpsCounter.style.fontSize = "18px";
         this.fpsCounter.style.fontWeight = "bold";
-        document.body.appendChild(this.fpsCounter);
-
-        const player1 = new Player(this, {
-            name: "Main Player",
-            speed: 120,
-            jump_force: 150,
-            hasController: true,
-            position: new THREE.Vector3(0, 0, 0)
-        });
-
-        const player2 = new Player(this, {
-            name: "Target NPC",
-            speed: 80,
-            jump_force: 100,
-            hasController: false,
-            position: new THREE.Vector3(50, 0, -100)
-        });
-
-        setInterval(() => {
-            player2.takeDamage(10);
-        }, 1000);
-
-        this.players.push(player1, player2);
+        this.fpsCounter.style.zIndex = "100";
+        target.appendChild(this.fpsCounter);
 
         this.physics = new Physics(this);
+        this.room = new Room(this);
 
         const floorGeometry = new THREE.PlaneGeometry(1000, 1000);
         const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
@@ -100,12 +87,6 @@ export class Render3JS {
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(10, 20, 10);
         this.scene.add(directionalLight);
-
-        window.addEventListener("keydown", (e) => {
-            if (e.key === "k") {
-                player2.takeDamage(10);
-            }
-        });
     }
 
     private updateFps() {
@@ -150,5 +131,13 @@ export class Render3JS {
         if (!this.animateId) return;
         cancelAnimationFrame(this.animateId);
         this.animateId = null;
+    }
+
+    public destroy() {
+        this.stop();
+        this.renderer.dispose();
+        this.scene.clear();
+        this.players = [];
+        this.fpsCounter.remove();
     }
 }

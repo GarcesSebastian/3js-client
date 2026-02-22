@@ -2,17 +2,19 @@ import * as THREE from "three";
 import { Render3JS } from "../render";
 import { WorldText } from "../helpers/WorldText";
 
-interface PlayerProps {
+export interface PlayerProps {
+    id: string;
     name: string;
-    speed: number;
-    jump_force: number;
     hasController: boolean;
+    speed?: number;
+    jump_force?: number;
     position?: THREE.Vector3;
     maxHealth?: number;
 }
 
 export class Player {
     private render: Render3JS;
+    public id: string;
     public name: string;
     public mesh: THREE.Mesh;
     private playerGroup: THREE.Group;
@@ -43,9 +45,10 @@ export class Player {
 
     constructor(render: Render3JS, props: PlayerProps) {
         this.render = render;
+        this.id = props.id;
         this.name = props.name;
-        this.speed = props.speed;
-        this.jump_force = props.jump_force;
+        this.speed = props.speed ?? 10;
+        this.jump_force = props.jump_force ?? 10;
         this.hasController = props.hasController;
         this.maxHealth = props.maxHealth || 100;
         this.health = this.maxHealth;
@@ -104,41 +107,74 @@ export class Player {
         return this.playerGroup.position;
     }
 
+    private onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "w") this.input_direction.forward = true;
+        if (event.key === "s") this.input_direction.backward = true;
+        if (event.key === "a") this.input_direction.left = true;
+        if (event.key === "d") this.input_direction.right = true;
+        if (event.key === " " && !this.input_direction.jumpRequested) {
+            this.input_direction.jumpRequested = true;
+        }
+    };
+
+    private onKeyUp = (event: KeyboardEvent) => {
+        if (event.key === "w") this.input_direction.forward = false;
+        if (event.key === "s") this.input_direction.backward = false;
+        if (event.key === "a") this.input_direction.left = false;
+        if (event.key === "d") this.input_direction.right = false;
+    };
+
+    private onMouseMove = (event: MouseEvent) => {
+        if (document.pointerLockElement !== this.render.renderer.domElement) return;
+
+        const sensitivity = 0.002;
+
+        this.rotY -= event.movementX * sensitivity;
+        this.rotX -= event.movementY * sensitivity;
+
+        const maxPitch = Math.PI / 2 - 0.01;
+        this.rotX = Math.max(-maxPitch, Math.min(maxPitch, this.rotX));
+    };
+
     private initEvents() {
-        window.addEventListener("keydown", (event) => {
-            if (event.key === "w") this.input_direction.forward = true;
-            if (event.key === "s") this.input_direction.backward = true;
-            if (event.key === "a") this.input_direction.left = true;
-            if (event.key === "d") this.input_direction.right = true;
-            if (event.key === " " && !this.input_direction.jumpRequested) {
-                this.input_direction.jumpRequested = true;
-            }
-        });
-
-        window.addEventListener("keyup", (event) => {
-            if (event.key === "w") this.input_direction.forward = false;
-            if (event.key === "s") this.input_direction.backward = false;
-            if (event.key === "a") this.input_direction.left = false;
-            if (event.key === "d") this.input_direction.right = false;
-        });
-
-        window.addEventListener("mousemove", (event) => {
-            if (document.pointerLockElement !== this.render.renderer.domElement) return;
-
-            const sensitivity = 0.002;
-
-            this.rotY -= event.movementX * sensitivity;
-            this.rotX -= event.movementY * sensitivity;
-
-            const maxPitch = Math.PI / 2 - 0.01;
-            this.rotX = Math.max(-maxPitch, Math.min(maxPitch, this.rotX));
-        });
+        window.addEventListener("keydown", this.onKeyDown);
+        window.addEventListener("keyup", this.onKeyUp);
+        window.addEventListener("mousemove", this.onMouseMove);
     }
 
     public jump() {
         if (!this.input_direction.jumpRequested) {
             this.input_direction.jumpRequested = true;
         }
+    }
+
+    public join() {
+        if (!this.render.players.find(p => p.id === this.id)) {
+            this.render.players.push(this);
+        }
+    }
+
+    public leave() {
+        this.render.players = this.render.players.filter(p => p.id !== this.id);
+        this.render.scene.remove(this.playerGroup);
+
+        if (this.hasController) {
+            this.cameraPivot.remove(this.render.camera);
+            window.removeEventListener("keydown", this.onKeyDown);
+            window.removeEventListener("keyup", this.onKeyUp);
+            window.removeEventListener("mousemove", this.onMouseMove);
+        }
+    }
+
+    public destroy() {
+        this.leave();
+        this.mesh.geometry.dispose();
+        if (Array.isArray(this.mesh.material)) {
+            this.mesh.material.forEach(m => m.dispose());
+        } else {
+            this.mesh.material.dispose();
+        }
+        this.uiLabel.destroy();
     }
 
     public update(delta: number) {

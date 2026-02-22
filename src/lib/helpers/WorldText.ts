@@ -59,4 +59,9 @@ export class WorldText {
 
         this.texture.needsUpdate = true;
     }
+
+    public destroy() {
+        this.texture.dispose();
+        this.sprite.material.dispose();
+    }
 }
