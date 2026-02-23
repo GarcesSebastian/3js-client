@@ -1,5 +1,5 @@
-import * as THREE from "three";
 import { Render3JS } from "../render";
+import { Player } from "../instances/_game/player";
 
 export class Physics {
     private render: Render3JS;
@@ -12,21 +12,22 @@ export class Physics {
         this.initWorker();
     }
 
+    private getLocalPlayer(): Player | undefined {
+        return this.render.players.find(p => p.hasController);
+    }
+
     private initWorker() {
         this.worker.onmessage = (e) => {
-            const { players } = e.data;
-            players.forEach((pData: any, index: number) => {
-                const player = this.render.players[index];
-                if (player) {
-                    player.setPosition(pData.position.x, pData.position.y, pData.position.z);
-                    player.velocityY = pData.velocityY;
-                    player.isGrounded = pData.isGrounded;
-
-                    if (pData.jumpProcessed) {
-                        player.input_direction.jumpRequested = false;
-                    }
+            const { position, velocityY, isGrounded, jumpProcessed } = e.data;
+            const local = this.getLocalPlayer();
+            if (local) {
+                local.setPosition(position.x, position.y, position.z);
+                local.velocityY = velocityY;
+                local.isGrounded = isGrounded;
+                if (jumpProcessed) {
+                    local.input_direction.jumpRequested = false;
                 }
-            });
+            }
             this.isCalculating = false;
         };
     }
@@ -34,19 +35,29 @@ export class Physics {
     public update(delta: number) {
         if (this.isCalculating) return;
 
+        const local = this.getLocalPlayer();
+        if (!local || local.isDead) return;
+
         this.isCalculating = true;
 
-        const playersData = this.render.players.map((p, index) => ({
-            id: index,
-            position: p.getPosition(),
-            velocityY: p.velocityY,
-            isGrounded: p.isGrounded,
-            jumpRequested: p.input_direction.jumpRequested,
-            jumpForce: p.jump_force
-        }));
+        const localCollider = local.getCollider();
+        const localPos = local.getPosition();
+
+        const obstacles = this.render.players
+            .filter(p => !p.hasController && !p.isDead)
+            .map(p => p.getCollider());
 
         this.worker.postMessage({
-            players: playersData,
+            local: {
+                position: { x: localPos.x, y: localPos.y, z: localPos.z },
+                colliderCenter: localCollider.center,
+                velocityY: local.velocityY,
+                isGrounded: local.isGrounded,
+                jumpRequested: local.input_direction.jumpRequested,
+                jumpForce: local.jump_force,
+                size: localCollider.size
+            },
+            obstacles,
             delta,
             gravity: this.render.gravity
         });

@@ -1,74 +1,78 @@
+interface ColliderId {
+    center: { x: number; y: number; z: number };
+    size: { x: number; y: number; z: number };
+}
+
 self.onmessage = (e: MessageEvent) => {
-    const { players, delta, gravity } = e.data;
-    const results = players.map((p: any) => ({
-        id: p.id,
-        position: { ...p.position },
-        velocityY: p.velocityY,
-        isGrounded: p.isGrounded,
-        jumpRequested: p.jumpRequested,
-        jumpForce: p.jumpForce,
-        jumpProcessed: false
-    }));
+    const { local, obstacles, delta, gravity } = e.data;
 
-    for (let i = 0; i < results.length; i++) {
-        const p = results[i];
+    const pos = { ...local.position };
+    let velocityY: number = local.velocityY;
+    let isGrounded: boolean = local.isGrounded;
+    let jumpProcessed: boolean = false;
 
-        if (p.jumpRequested && p.isGrounded) {
-            p.velocityY = p.jumpForce;
-            p.isGrounded = false;
-            p.jumpProcessed = true;
-        }
+    const s = local.size;
+    const co = local.colliderCenter;
+    const offsetX = co.x - pos.x;
+    const offsetY = co.y - pos.y;
+    const offsetZ = co.z - pos.z;
 
-        p.velocityY -= gravity * delta;
-        p.position.y += p.velocityY * delta;
-        p.isGrounded = false;
-
-        if (p.position.y <= 0) {
-            p.position.y = 0;
-            p.velocityY = 0;
-            p.isGrounded = true;
-        }
+    if (local.jumpRequested && isGrounded) {
+        velocityY = local.jumpForce;
+        isGrounded = false;
+        jumpProcessed = true;
     }
 
-    const size = 10;
+    velocityY -= gravity * delta;
+    pos.y += velocityY * delta;
+    isGrounded = false;
 
-    for (let i = 0; i < results.length; i++) {
-        const p1 = results[i];
-        for (let j = 0; j < results.length; j++) {
-            if (i === j) continue;
-            const p2 = results[j];
+    if (pos.y <= 0) {
+        pos.y = 0;
+        velocityY = 0;
+        isGrounded = true;
+    }
 
-            const dx = p1.position.x - p2.position.x;
-            const dy = p1.position.y - p2.position.y;
-            const dz = p1.position.z - p2.position.z;
-            const absDx = Math.abs(dx);
-            const absDy = Math.abs(dy);
-            const absDz = Math.abs(dz);
+    const cx = pos.x + offsetX;
+    const cy = pos.y + offsetY;
+    const cz = pos.z + offsetZ;
 
-            if (absDx < size && absDy < size && absDz < size) {
-                const overlapX = size - absDx;
-                const overlapY = size - absDy;
-                const overlapZ = size - absDz;
+    for (const obs of obstacles as ColliderId[]) {
+        const halfX = (s.x + obs.size.x) / 2;
+        const halfY = (s.y + obs.size.y) / 2;
+        const halfZ = (s.z + obs.size.z) / 2;
 
-                if (overlapY < overlapX && overlapY < overlapZ) {
-                    if (dy > 0) {
-                        p1.position.y += overlapY;
-                        if (p1.velocityY < 0) {
-                            p1.velocityY = 0;
-                            p1.isGrounded = true;
-                        }
-                    } else {
-                        p1.position.y -= overlapY;
-                        p1.velocityY = Math.max(0, p1.velocityY);
+        const dx = cx - obs.center.x;
+        const dy = cy - obs.center.y;
+        const dz = cz - obs.center.z;
+
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const absDz = Math.abs(dz);
+
+        if (absDx < halfX && absDy < halfY && absDz < halfZ) {
+            const overlapX = halfX - absDx;
+            const overlapY = halfY - absDy;
+            const overlapZ = halfZ - absDz;
+
+            if (overlapY < overlapX && overlapY < overlapZ) {
+                if (dy > 0) {
+                    pos.y += overlapY;
+                    if (velocityY < 0) {
+                        velocityY = 0;
+                        isGrounded = true;
                     }
-                } else if (overlapX < overlapZ) {
-                    p1.position.x += dx > 0 ? overlapX : -overlapX;
                 } else {
-                    p1.position.z += dz > 0 ? overlapZ : -overlapZ;
+                    pos.y -= overlapY;
+                    if (velocityY > 0) velocityY = 0;
                 }
+            } else if (overlapX < overlapZ) {
+                pos.x += dx > 0 ? overlapX : -overlapX;
+            } else {
+                pos.z += dz > 0 ? overlapZ : -overlapZ;
             }
         }
     }
 
-    self.postMessage({ players: results });
+    self.postMessage({ position: pos, velocityY, isGrounded, jumpProcessed });
 };

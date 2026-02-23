@@ -1,18 +1,18 @@
 "use client";
-import * as THREE from "three";
 import { createContext, ReactNode, useEffect, useState, useCallback } from "react";
 import { Render3JS } from "@/lib/render";
 import { useSocket } from "@/hooks/useSocket";
 import { v4 as uuidv4 } from "uuid";
 import Cookies from "js-cookie";
-import { PlayerStats } from "@/lib/instances/player";
-import { ProjectileProps } from "@/lib/instances/projectile";
+import { PlayerStats } from "@/lib/instances/_game/player";
+import { ProjectileProps } from "@/lib/instances/_game/projectile";
 
 interface GameContextProps {
     render: Render3JS | null;
     players: PlayerStats[];
     initGame: (container: HTMLDivElement) => void;
     handleJoinGame: (username: string) => void;
+    isLoaded: boolean;
 }
 
 export const GameContext = createContext<GameContextProps | null>(null);
@@ -22,12 +22,18 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     const [render, setRender] = useState<Render3JS | null>(null);
     const [players, setPlayers] = useState<PlayerStats[]>([]);
     const [pendingPlayers, setPendingPlayers] = useState<PlayerStats[]>([]);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     const initGame = useCallback((container: HTMLDivElement) => {
         if (!socket) return;
 
         const renderInstance = new Render3JS(socket, container);
         setRender(renderInstance);
+
+        renderInstance.events.onLoaded(() => {
+            setIsLoaded(true);
+        });
+
         renderInstance.start();
 
         return () => {
@@ -108,12 +114,16 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [render]);
 
-    const handlePlayerMoved = useCallback((data: PlayerStats & { position: any, rotation: any }) => {
+    const handlePlayerMoved = useCallback((data: PlayerStats & { position: any, rotation: any, velocityY?: number }) => {
         if (!render) return;
         const player = render.room.getPlayerById(data.id);
         if (player) {
             player.setPosition(data.position.x, data.position.y, data.position.z);
             player.setRotation(data.rotation.x, data.rotation.y, data.rotation.z);
+            if (data.velocityY !== undefined) {
+                player.setVelocityY(data.velocityY);
+                player.isGrounded = data.velocityY === 0;
+            }
         }
     }, [render]);
 
@@ -206,7 +216,52 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     }, [socket, handlePlayerJoin, handlePlayerJoined, handlePlayerMoved, handleProjectileCreated, handleProjectileDied, handlePlayerHealth, handlePlayerDied, handleSocketConnectedClient, handlePlayerLeft]);
 
     return (
-        <GameContext.Provider value={{ render, players, initGame, handleJoinGame }}>
+        <GameContext.Provider value={{ render, players, initGame, handleJoinGame, isLoaded }}>
+            {!isLoaded && (
+                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black overflow-hidden font-sans select-none touch-none">
+                    <div className="relative flex flex-col items-center gap-8 -translate-y-4">
+                        <div className="relative w-24 h-24">
+                            <div className="absolute inset-0 border-t-2 border-r-2 border-white/20 rounded-full animate-spin duration-[2000ms]" />
+                            <div className="absolute inset-2 border-t-2 border-white/40 rounded-full animate-spin-reverse duration-[1500ms]" />
+                            <div className="absolute inset-4 border-t-2 border-white/80 rounded-full animate-spin duration-[1000ms]" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-2 h-2 bg-white rounded-full animate-pulse shadow-[0_0_15px_rgba(255,255,255,0.8)]" />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-2">
+                            <h2 className="text-4xl font-black italic tracking-tighter text-white uppercase drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                                CARGANDO MUNDO
+                            </h2>
+                            <div className="flex items-center gap-3">
+                                <div className="h-[1px] w-8 bg-gradient-to-l from-white/20 to-transparent" />
+                                <span className="text-white/20 text-[10px] font-bold uppercase tracking-[0.5em] animate-pulse">
+                                    INICIALIZANDO ASSETS
+                                </span>
+                                <div className="h-[1px] w-8 bg-gradient-to-r from-white/20 to-transparent" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-2 text-white/10 text-[9px] font-bold tracking-[0.3em]">
+                        <span className="uppercase">Three.js Engine</span>
+                        <div className="w-1 h-1 bg-white/10 rounded-full" />
+                        <span className="uppercase">World Renderer v2.0</span>
+                    </div>
+
+                    <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,255,255,0.01),rgba(255,255,255,0.01),rgba(255,255,255,0.01))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
+
+                    <style jsx>{`
+                        @keyframes spin-reverse {
+                            from { transform: rotate(0deg); }
+                            to { transform: rotate(-360deg); }
+                        }
+                        .animate-spin-reverse {
+                            animation: spin-reverse linear infinite;
+                        }
+                    `}</style>
+                </div>
+            )}
             {children}
         </GameContext.Provider>
     );

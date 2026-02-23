@@ -1,29 +1,22 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useGame } from "@/hooks/useGame";
 
 export default function Home() {
   const { initGame, handleJoinGame, players, render } = useGame();
+
   const [gameJoined, setGameJoined] = useState(false);
   const [name, setName] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+
+  const [isDead, setIsDead] = useState(false);
+  const [deathTimer, setDeathTimer] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const joystickState = useRef({
-    active: false,
-    id: -1,
-    baseX: 0,
-    baseY: 0
-  });
+  const joystickState = useRef({ active: false, id: -1, baseX: 0, baseY: 0 });
   const [joystickUI, setJoystickUI] = useState({ currentX: 0, currentY: 0 });
-
-  const lookState = useRef({
-    active: false,
-    id: -1,
-    lastX: 0,
-    lastY: 0
-  });
+  const lookState = useRef({ active: false, id: -1, lastX: 0, lastY: 0 });
 
   useEffect(() => {
     setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -35,6 +28,54 @@ export default function Home() {
     handleJoinGame(name);
     setGameJoined(true);
   };
+
+  const handleRespawn = useCallback(() => {
+    const player = render?.room.getPlayers().find(p => p.hasController);
+    if (player) {
+      render?.socket.emit("player:respawn");
+      player.setHealth(100);
+      player.setPosition(0, 0, 0);
+      setIsDead(false);
+      setDeathTimer(0);
+    }
+  }, [render]);
+
+  useEffect(() => {
+    if (!render) return;
+    const player = render.room.getPlayers().find(p => p.hasController);
+    if (!player) return;
+
+    const onDeath = () => {
+      setIsDead(true);
+      setDeathTimer(5000);
+    };
+
+    player.events.onDeath(onDeath);
+  }, [render, gameJoined]);
+
+  useEffect(() => {
+    if (!isDead) return;
+
+    let startTime = performance.now();
+    let animationFrame: number;
+
+    const update = () => {
+      const now = performance.now();
+      const elapsed = now - startTime;
+      const remaining = Math.max(0, 5000 - elapsed);
+
+      setDeathTimer(remaining);
+
+      if (remaining > 0) {
+        animationFrame = requestAnimationFrame(update);
+      } else {
+        handleRespawn();
+      }
+    };
+
+    animationFrame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isDead, handleRespawn]);
 
   const onJoystickStart = (e: React.TouchEvent) => {
     e.stopPropagation();
@@ -51,7 +92,6 @@ export default function Home() {
   const onJoystickMove = (e: React.TouchEvent) => {
     e.stopPropagation();
     if (!joystickState.current.active) return;
-
     const touch = Array.from(e.touches).find(t => t.identifier === joystickState.current.id);
     if (!touch) return;
 
@@ -77,9 +117,6 @@ export default function Home() {
 
   const onJoystickEnd = (e: React.TouchEvent) => {
     e.stopPropagation();
-    const touch = Array.from(e.changedTouches).find(t => t.identifier === joystickState.current.id);
-    if (!touch) return;
-
     joystickState.current.active = false;
     joystickState.current.id = -1;
     const player = render?.room.getPlayers().find(p => p.hasController);
@@ -93,7 +130,6 @@ export default function Home() {
   const onGlobalTouchStart = (e: React.TouchEvent) => {
     if (!gameJoined || lookState.current.active) return;
     const touch = e.changedTouches[0];
-
     lookState.current = {
       active: true,
       id: touch.identifier,
@@ -106,15 +142,10 @@ export default function Home() {
     if (!lookState.current.active) return;
     const touch = Array.from(e.touches).find(t => t.identifier === lookState.current.id);
     if (!touch) return;
-
     const deltaX = touch.clientX - lookState.current.lastX;
     const deltaY = touch.clientY - lookState.current.lastY;
-
     const player = render?.room.getPlayers().find(p => p.hasController);
-    if (player) {
-      player.updateRotation(deltaX * 2.5, deltaY * 2.5);
-    }
-
+    if (player) player.updateRotation(deltaX * 2.5, deltaY * 2.5);
     lookState.current.lastX = touch.clientX;
     lookState.current.lastY = touch.clientY;
   };
@@ -126,6 +157,9 @@ export default function Home() {
       lookState.current.id = -1;
     }
   };
+
+  const displaySeconds = Math.max(0, Math.ceil(deathTimer / 1000));
+  const progress = deathTimer / 5000;
 
   return (
     <main
@@ -162,13 +196,65 @@ export default function Home() {
 
       {gameJoined && (
         <div className="fixed inset-0 pointer-events-none z-20">
+          {isDead && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-1000 pointer-events-auto">
+              <div className="absolute inset-0 shadow-[inset_0_0_250px_rgba(0,0,0,1)] bg-gradient-to-t from-red-950/40 via-transparent to-black/40 pointer-events-none" />
+
+              <div className="relative flex flex-col items-center gap-1 scale-110">
+                <div className="relative group">
+                  <h2 className="text-8xl font-black tracking-tight text-white uppercase italic drop-shadow-[0_0_50px_rgba(220,38,38,0.8)] animate-pulse">
+                    HAS MUERTO
+                  </h2>
+                  <div className="absolute -inset-x-24 top-1/2 h-[1px] bg-red-500/30 blur-sm" />
+                </div>
+
+                <div className="flex flex-col items-center mt-12 gap-6 text-white/90">
+                  <div className="flex items-center gap-4">
+                    <div className="h-[1px] w-16 bg-gradient-to-l from-white/20 to-transparent" />
+                    <span className="text-white/40 text-[9px] font-bold uppercase tracking-[0.6em]">REAPARECIENDO</span>
+                    <div className="h-[1px] w-16 bg-gradient-to-r from-white/20 to-transparent" />
+                  </div>
+
+                  <div className="relative flex items-center justify-center">
+                    <div className="text-8xl font-black text-white font-mono tabular-nums leading-none tracking-tighter drop-shadow-2xl">
+                      0{displaySeconds}
+                    </div>
+                    <svg className="absolute w-40 h-40 -rotate-90">
+                      <circle
+                        cx="80"
+                        cy="80"
+                        r="76"
+                        fill="transparent"
+                        stroke="rgba(255, 255, 255, 0.03)"
+                        strokeWidth="1.5"
+                      />
+                      <circle
+                        cx="80"
+                        cy="80"
+                        r="76"
+                        fill="transparent"
+                        stroke="rgba(220, 38, 38, 0.4)"
+                        strokeWidth="2"
+                        strokeDasharray="477"
+                        strokeDashoffset={477 - (477 * progress)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20" />
+            </div>
+          )}
+
           <div className="absolute top-4 left-4 flex flex-col gap-2 w-[140px]">
             <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
               <div className="flex items-center justify-between mb-1 pb-1 border-b border-white/5">
                 <span className="text-[10px] font-bold text-gray-400">PLAYERS</span>
                 <span className="text-[10px] font-bold text-purple-400">{players.length}</span>
               </div>
-              <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
+              <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto font-mono">
                 {players.map((plr) => (
                   <div key={plr?.id} className={`flex flex-col gap-1 px-1.5 py-1 ${plr?.username === name ? 'bg-white/10 rounded' : ''}`}>
                     <div className="flex items-center gap-1.5 ">
@@ -204,9 +290,9 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="absolute bottom-10 right-6 flex items-center gap-4">
+              <div className="absolute bottom-10 right-6 flex items-center gap-4 text-white/90">
                 <button
-                  className="w-16 h-16 rounded-full bg-red-500/20 backdrop-blur-md border border-red-400/40 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-red-500/50 transition-all"
+                  className="w-16 h-16 rounded-full bg-red-500/20 backdrop-blur-md border border-red-400/40 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-red-500/50 transition-all font-bold text-[10px] uppercase tracking-wider"
                   onTouchStart={(e) => {
                     e.stopPropagation();
                     const player = render?.room.getPlayers().find(p => p.hasController);
@@ -217,23 +303,18 @@ export default function Home() {
                     const player = render?.room.getPlayers().find(p => p.hasController);
                     if (player) player.input_direction.shooting = false;
                   }}
-                  onTouchCancel={(e) => {
-                    e.stopPropagation();
-                    const player = render?.room.getPlayers().find(p => p.hasController);
-                    if (player) player.input_direction.shooting = false;
-                  }}
                 >
-                  <span className="font-bold text-red-300 text-[10px] uppercase">Fire</span>
+                  Fire
                 </button>
 
                 <button
-                  className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-white/30 transition-all"
+                  className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-white/30 transition-all font-bold text-[10px] uppercase tracking-wider"
                   onTouchStart={(e) => {
                     e.stopPropagation();
                     render?.room.getPlayers().find(p => p.hasController)?.jump();
                   }}
                 >
-                  <span className="font-bold text-white text-[10px] uppercase">Jump</span>
+                  Jump
                 </button>
               </div>
             </div>

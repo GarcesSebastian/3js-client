@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { Render3JS } from "../render";
-import { type PlayerProps, Player } from "./player";
+import { Render3JS } from "../../render";
+import { type PlayerProps, Player } from "../_game/player";
 import { v4 as uuidv4 } from "uuid";
-import { type ProjectileProps, Projectile } from "./projectile";
+import { type ProjectileProps, Projectile } from "../_game/projectile";
 
 interface PlayerRoom extends PlayerProps {
     id: string
@@ -27,6 +27,7 @@ export class Room {
         const player = new Player(this.render, {
             id: options.id || uuidv4(),
             username: options.username,
+            meshName: options.meshName,
             speed: options.speed || 120,
             jump_force: options.jump_force || 150,
             hasController: options.hasController,

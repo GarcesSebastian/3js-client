@@ -1,17 +1,20 @@
 import * as THREE from "three";
-import { Render3JS } from "../render";
-import { WorldText } from "../helpers/WorldText";
-import { PlayerEvents } from "../events/PlayerEvents";
+import { Render3JS } from "../../render";
+import { WorldText } from "../_ui/WorldText";
+import { PlayerEvents } from "../../events/PlayerEvents";
+import { LoaderAssets } from "../../helpers/LoaderAssets";
 import { v4 as uuidv4 } from "uuid";
 
 export interface PlayerStats {
     id: string;
+    meshName?: string;
     username: string;
     health: number;
     maxHealth: number;
     speed: number;
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };
+    velocityY?: number;
 }
 
 export interface PlayerProps extends PlayerStats {
@@ -23,10 +26,19 @@ export class Player {
     private render: Render3JS;
     public id: string;
     public username: string;
-    public mesh: THREE.Mesh;
-    private playerGroup: THREE.Group;
-    private cameraPivot: THREE.Group;
-    private uiLabel: WorldText;
+    public mesh: THREE.Object3D = new THREE.Object3D();
+    public meshName: string = "";
+
+    private colliderOffset: THREE.Vector3 = new THREE.Vector3();
+    private colliderSize: THREE.Vector3 = new THREE.Vector3();
+    private currentBox: THREE.Box3 = new THREE.Box3();
+
+    private debugHelper: THREE.Box3Helper | null = null;
+    public static showWireframes: boolean = true;
+
+    private playerGroup: THREE.Group = new THREE.Group();
+    private cameraPivot: THREE.Group = new THREE.Group();
+    private uiLabel!: WorldText;
     public events: PlayerEvents = new PlayerEvents();
 
     public speed: number = 10;
@@ -54,12 +66,6 @@ export class Player {
     private rotY: number = 0;
     private rotX: number = 0;
 
-    private size: { x: number, y: number, z: number } = {
-        x: 10,
-        y: 10,
-        z: 10
-    }
-
     private targetPosition = new THREE.Vector3();
     private targetRotation = new THREE.Euler();
     private targetQuaternion = new THREE.Quaternion();
@@ -77,7 +83,7 @@ export class Player {
         this.render = render;
         this.id = props.id;
         this.username = props.username;
-        this.speed = props.speed ?? 10;
+        this.speed = props.speed ?? 80;
         this.jump_force = props.jump_force ?? 10;
         this.hasController = props.hasController;
         this.maxHealth = props.maxHealth || 100;
@@ -87,38 +93,81 @@ export class Player {
         this.cameraPivot = new THREE.Group();
 
         if (props.position) {
-            this.playerGroup.position.copy(new THREE.Vector3(props.position.x, props.position.y, props.position.z));
-            this.targetPosition.copy(new THREE.Vector3(props.position.x, props.position.y, props.position.z));
+            this.playerGroup.position.set(props.position.x, props.position.y, props.position.z);
+            this.targetPosition.copy(this.playerGroup.position);
         }
 
         if (props.rotation) {
-            this.playerGroup.rotation.copy(new THREE.Euler(props.rotation.x, props.rotation.y, props.rotation.z));
-            this.targetRotation.copy(new THREE.Euler(props.rotation.x, props.rotation.y, props.rotation.z));
+            this.playerGroup.rotation.set(props.rotation.x, props.rotation.y, props.rotation.z);
+            this.targetRotation.set(props.rotation.x, props.rotation.y, props.rotation.z);
+            this.targetQuaternion.setFromEuler(this.targetRotation);
+            this.rotY = props.rotation.y;
         }
 
-        const geometry = new THREE.BoxGeometry(this.size.x, this.size.y, this.size.z);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0x00ff00,
-            roughness: 0.7,
-            metalness: 0.3
-        });
+        const { name, model } = props.meshName ? LoaderAssets.getPlayerByName(props.meshName) : LoaderAssets.randomPlayer();
+        this.meshName = name;
+        this.mesh = model;
+        this.mesh.rotation.y = Math.PI;
+        this.mesh.position.set(0, 0, 0);
+        this.mesh.scale.set(10, 10, 10);
 
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.castShadow = true;
+        this.buildCollider();
+
         this.playerGroup.add(this.mesh);
 
         this.uiLabel = new WorldText(this.username);
-        this.uiLabel.sprite.position.y = 10;
+        this.uiLabel.sprite.position.y = this.colliderSize.y + 10;
         this.playerGroup.add(this.uiLabel.sprite);
 
         if (this.hasController) {
             this.playerGroup.add(this.cameraPivot);
             this.cameraPivot.add(this.render.camera);
-            this.render.camera.position.set(0, 10, 60);
+            this.render.camera.position.set(0, 30, 100);
+            this.render.camera.lookAt(0, 0, 0);
             this.initEvents();
         }
 
         this.render.scene.add(this.playerGroup);
+        this.updateWireframe();
+    }
+
+    private buildCollider() {
+        this.mesh.updateMatrixWorld(true);
+        const box3 = new THREE.Box3().setFromObject(this.mesh);
+
+        const center = box3.getCenter(new THREE.Vector3());
+        const size = box3.getSize(new THREE.Vector3());
+
+        this.colliderSize.set(size.x * 0.6, size.y * 0.95, size.z * 0.6);
+        this.colliderOffset.copy(center);
+    }
+
+    private updateWireframe() {
+        if (Player.showWireframes) {
+            if (!this.debugHelper) {
+                this.debugHelper = new THREE.Box3Helper(this.currentBox, 0x00ff00);
+                this.render.scene.add(this.debugHelper);
+            }
+            this.debugHelper.visible = !this.isDead;
+        } else if (this.debugHelper) {
+            this.debugHelper.visible = false;
+        }
+    }
+
+    public getCollider() {
+        const pos = this.playerGroup.position;
+        const center = new THREE.Vector3(
+            pos.x + this.colliderOffset.x,
+            pos.y + this.colliderOffset.y,
+            pos.z + this.colliderOffset.z
+        );
+
+        this.currentBox.setFromCenterAndSize(center, this.colliderSize);
+
+        return {
+            center: { x: center.x, y: center.y, z: center.z },
+            size: { x: this.colliderSize.x, y: this.colliderSize.y, z: this.colliderSize.z }
+        };
     }
 
     public takeDamage(amount: number) {
@@ -134,7 +183,25 @@ export class Player {
 
     private die() {
         this.isDead = true;
-        (this.mesh.material as THREE.MeshStandardMaterial).color.set(0xff0000);
+        this.input_direction.forward = false;
+        this.input_direction.backward = false;
+        this.input_direction.left = false;
+        this.input_direction.right = false;
+        this.input_direction.jumpRequested = false;
+        this.input_direction.shooting = false;
+        this.input_direction.joystickX = 0;
+        this.input_direction.joystickY = 0;
+
+        this.mesh.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                if (mesh.material instanceof THREE.MeshStandardMaterial) {
+                    mesh.material.color.set(0xff0000);
+                }
+            }
+        });
+
+        if (this.debugHelper) this.debugHelper.visible = false;
         this.events.emitDeath();
     }
 
@@ -143,9 +210,13 @@ export class Player {
             this.playerGroup.position.set(x, y, z);
             this.checkAndEmitMove();
         } else {
-            const dist = this.playerGroup.position.distanceTo(new THREE.Vector3(x, y, z));
-            if (dist > 15) this.playerGroup.position.set(x, y, z);
             this.targetPosition.set(x, y, z);
+        }
+    }
+
+    public setVelocityY(vy: number) {
+        if (!this.hasController) {
+            this.velocityY = vy;
         }
     }
 
@@ -161,12 +232,22 @@ export class Player {
 
     public setHealth(health: number, callback?: (health: number) => void): void {
         this.health = health;
+
         if (this.health <= 0 && !this.isDead) {
             this.die();
         } else if (this.health > 0 && this.isDead) {
             this.isDead = false;
-            (this.mesh.material as THREE.MeshStandardMaterial).color.set(0x00ff00);
+            this.mesh.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                    const mesh = child as THREE.Mesh;
+                    if (mesh.material instanceof THREE.MeshStandardMaterial) {
+                        mesh.material.color.set(0xffffff);
+                    }
+                }
+            });
+            if (this.debugHelper) this.debugHelper.visible = Player.showWireframes;
         }
+
         if (callback) callback(this.health);
     }
 
@@ -174,8 +255,9 @@ export class Player {
         return {
             id: this.id,
             username: this.username,
-            position: this.playerGroup.position,
-            rotation: this.playerGroup.rotation,
+            meshName: this.meshName,
+            position: { x: this.playerGroup.position.x, y: this.playerGroup.position.y, z: this.playerGroup.position.z },
+            rotation: { x: this.playerGroup.rotation.x, y: this.playerGroup.rotation.y, z: this.playerGroup.rotation.z },
             health: this.health,
             maxHealth: this.maxHealth,
             speed: this.speed
@@ -195,6 +277,7 @@ export class Player {
     }
 
     private onKeyDown = (e: KeyboardEvent) => {
+        if (this.isDead) return;
         if (e.key === "w") this.input_direction.forward = true;
         if (e.key === "s") this.input_direction.backward = true;
         if (e.key === "a") this.input_direction.left = true;
@@ -217,6 +300,7 @@ export class Player {
     };
 
     private onMouseDown = (e: MouseEvent) => {
+        if (this.isDead) return;
         if (e.button === 0) this.input_direction.shooting = true;
     };
 
@@ -233,6 +317,7 @@ export class Player {
     }
 
     public jump() {
+        if (this.isDead) return;
         if (!this.input_direction.jumpRequested) {
             this.input_direction.jumpRequested = true;
             this.events.emitJumping();
@@ -240,28 +325,26 @@ export class Player {
     }
 
     public shoot() {
+        if (this.isDead) return;
         const now = performance.now();
         if (now - this.lastShootTime < this.shootCooldownMs) return;
         this.lastShootTime = now;
 
         const radius = 3;
-        const plr_position_cloned = this.playerGroup.position.clone();
-
+        const plr_pos = this.playerGroup.position.clone();
         const yaw = this.playerGroup.rotation.y;
         const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-        const spawnOffset = forward.clone().multiplyScalar((this.size.z / 2) + radius);
-        const projectile_position = plr_position_cloned.add(spawnOffset);
+        const spawnPos = plr_pos.clone().add(forward.multiplyScalar(20));
+        spawnPos.y += 10;
 
-        const rot = this.playerGroup.rotation;
         const projectile = this.render.room.createProjectile({
             id: uuidv4(),
             ownerId: this.id,
-            position: { x: projectile_position.x, y: projectile_position.y, z: projectile_position.z },
-            rotation: { x: rot.x, y: rot.y, z: rot.z },
-            radius,
-            speed: 200,
+            position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z },
+            rotation: { x: 0, y: yaw, z: 0 },
+            speed: 300,
             damage: 10,
-            ttl: 10000
+            radius
         });
 
         projectile.onDeath((data) => {
@@ -276,12 +359,18 @@ export class Player {
     public getPosition() { return this.playerGroup.position; }
 
     public join() {
-        if (!this.render.players.find(p => p.id === this.id)) this.render.players.push(this);
+        if (!this.render.players.find(p => p.id === this.id)) {
+            this.render.players.push(this);
+        }
     }
 
     public leave() {
         this.render.players = this.render.players.filter(p => p.id !== this.id);
         this.render.scene.remove(this.playerGroup);
+        if (this.debugHelper) {
+            this.render.scene.remove(this.debugHelper);
+            this.debugHelper = null;
+        }
         if (this.hasController) {
             this.cameraPivot.remove(this.render.camera);
             window.removeEventListener("keydown", this.onKeyDown);
@@ -295,15 +384,14 @@ export class Player {
     public destroy() {
         this.leave();
         this.events.clear();
-        this.mesh.geometry.dispose();
-        if (Array.isArray(this.mesh.material)) this.mesh.material.forEach(m => m.dispose());
-        else this.mesh.material.dispose();
         this.uiLabel.destroy();
     }
 
     public update(delta: number) {
         this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
-        if (this.isDead) return;
+
+        this.getCollider();
+        this.updateWireframe();
 
         if (this.hasController) {
             if (this.input_direction.shooting) this.shoot();
@@ -330,6 +418,16 @@ export class Player {
             const lerpStep = Math.min(1, this.lerpSpeed * delta);
             this.playerGroup.position.lerp(this.targetPosition, lerpStep);
             this.playerGroup.quaternion.slerp(this.targetQuaternion, lerpStep);
+
+            if (!this.isGrounded) {
+                this.velocityY -= this.render.gravity * delta;
+                this.playerGroup.position.y += this.velocityY * delta;
+                if (this.playerGroup.position.y <= this.targetPosition.y) {
+                    this.playerGroup.position.y = this.targetPosition.y;
+                    this.velocityY = 0;
+                    this.isGrounded = true;
+                }
+            }
         }
     }
 
@@ -337,16 +435,20 @@ export class Player {
         if (!this.hasController) return;
         const now = performance.now();
         if (now - this.lastEmitTime < this.emitInterval) return;
-        const dist = this.playerGroup.position.distanceTo(this.lastEmittedPosition);
-        const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY);
 
-        if (dist > 0.001 || rotDist > 0.001) {
-            this.lastEmittedPosition.copy(this.playerGroup.position);
+        const pos = this.playerGroup.position;
+        const dist = pos.distanceTo(this.lastEmittedPosition);
+        const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY);
+        const isAirborne = !this.isGrounded || Math.abs(this.velocityY) > 0.1;
+
+        if (dist > 0.001 || rotDist > 0.001 || isAirborne) {
+            this.lastEmittedPosition.copy(pos);
             this.lastEmittedRotationY = this.playerGroup.rotation.y;
             this.lastEmitTime = now;
             this.events.emitMove({
-                position: { x: this.playerGroup.position.x, y: this.playerGroup.position.y, z: this.playerGroup.position.z },
-                rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 }
+                position: { x: pos.x, y: pos.y, z: pos.z },
+                rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 },
+                velocityY: this.velocityY
             });
         }
     }

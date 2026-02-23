@@ -1,6 +1,6 @@
 import * as THREE from "three"
-import { ProjectileEvents } from "../events/ProjectileEvents";
-import { Render3JS } from "../render";
+import { ProjectileEvents } from "../../events/ProjectileEvents";
+import { Render3JS } from "../../render";
 
 export interface ProjectileProps {
     id: string,
@@ -18,7 +18,7 @@ const MAX_PROJECTILES = 400;
 
 export class Projectile extends ProjectileEvents {
     public render: Render3JS;
-    public mesh: THREE.Mesh;
+    public mesh: THREE.Object3D;
 
     public id: string;
     public ownerId: string;
@@ -71,10 +71,13 @@ export class Projectile extends ProjectileEvents {
 
         this.startTime = performance.now() - elapsedMs;
 
-        const geometry = new THREE.SphereGeometry(props.radius, 6, 6);
-        const material = new THREE.MeshBasicMaterial({ color: 0xff4400 });
-        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh = new THREE.Mesh(
+            new THREE.SphereGeometry(this.radius, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00 })
+        );
+
         this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+        this.mesh.rotation.y = yaw;
 
         if (!noEmit) this.render.socket.emit("projectile:create", this.getStats());
         this.render.scene.add(this.mesh);
@@ -97,10 +100,20 @@ export class Projectile extends ProjectileEvents {
         for (const player of this.render.players) {
             if (player.id === this.ownerId || player.isDead) continue;
 
-            const dist = this.mesh.position.distanceTo(player.getPosition());
-            const collisionDist = 10;
+            const collider = player.getCollider();
+            const playerCenter = new THREE.Vector3(
+                collider.center.x,
+                collider.center.y,
+                collider.center.z
+            );
 
-            if (dist < collisionDist) {
+            const dist = this.mesh.position.distanceTo(playerCenter);
+
+            const xMatch = Math.abs(this.mesh.position.x - playerCenter.x) < (collider.size.x / 2 + this.radius);
+            const yMatch = Math.abs(this.mesh.position.y - playerCenter.y) < (collider.size.y / 2 + this.radius);
+            const zMatch = Math.abs(this.mesh.position.z - playerCenter.z) < (collider.size.z / 2 + this.radius);
+
+            if (xMatch && yMatch && zMatch) {
                 this.emitHit({
                     id: this.id,
                     ownerId: this.ownerId,
@@ -128,10 +141,18 @@ export class Projectile extends ProjectileEvents {
     public destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
-        this.render.scene.remove(this.mesh);
         this.render.projectiles.delete(this.id);
-        this.mesh.geometry.dispose();
-        (this.mesh.material as THREE.MeshBasicMaterial).dispose();
+
+        this.mesh.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.geometry.dispose();
+                if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
+                else mesh.material.dispose();
+            }
+        });
+
+        this.render.scene.remove(this.mesh);
         this.emitDeath({ id: this.id, ownerId: this.ownerId });
     }
 }

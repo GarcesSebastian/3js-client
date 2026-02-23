@@ -1,10 +1,13 @@
 import * as THREE from "three";
 import { EventsListener } from "./helpers/EventsListener";
-import { Player } from "./instances/player";
+import { Player } from "./instances/_game/player";
 import { Physics } from "./helpers/Physics";
-import { Room } from "./instances/room";
-import { Projectile, ProjectileProps } from "./instances/projectile";
+import { Room } from "./instances/_logic/room";
+import { Projectile } from "./instances/_game/projectile";
 import { Socket } from "socket.io-client";
+import { LoaderAssets } from "./helpers/LoaderAssets";
+import { GameEvents } from "./events/GameEvents";
+
 export class Render3JS {
     public scene: THREE.Scene;
     public camera: THREE.PerspectiveCamera;
@@ -15,20 +18,22 @@ export class Render3JS {
     public gravity: number = 9.8 * 40;
 
     private animateId: number | null = null;
-    private clock: THREE.Clock = new THREE.Clock();
+    private timer: any = new THREE.Timer();
 
     public players: Player[] = [];
     public projectiles: Map<string, Projectile> = new Map();
     public physics: Physics;
     public room: Room;
     public socket: Socket;
+    public events: GameEvents;
 
     private fpsCounter: HTMLDivElement;
     private frameCount: number = 0;
     private lastFpsUpdate: number = 0;
 
-    constructor(socket: Socket, container?: HTMLElement) {
+    public constructor(socket: Socket, container?: HTMLElement) {
         this.socket = socket;
+        this.events = new GameEvents();
         new EventsListener(this);
 
         this.scene = new THREE.Scene();
@@ -42,10 +47,13 @@ export class Render3JS {
         this.renderer = new THREE.WebGLRenderer({
             antialias: true,
             powerPreference: "high-performance",
-            alpha: true
+            precision: "mediump",
+            alpha: false,
+            stencil: false,
+            depth: true
         })
         this.renderer.setSize(this.width, this.height);
-        this.renderer.setPixelRatio(window.devicePixelRatio)
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
         const target = container || document.body;
         target.appendChild(this.renderer.domElement);
@@ -93,16 +101,20 @@ export class Render3JS {
         this.physics = new Physics(this);
         this.room = new Room(this);
 
-        const floorGeometry = new THREE.PlaneGeometry(1000, 1000);
-        const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -5;
-        this.scene.add(floor);
+        this.loadAssets().then(() => {
+            this.events.emitLoaded();
+        });
+    }
 
-        const grid = new THREE.GridHelper(1000, 100, 0x444444, 0x222222);
-        grid.position.y = -4.9;
-        this.scene.add(grid);
+    private async loadAssets(): Promise<void> {
+        const [base] = await Promise.all([
+            LoaderAssets.load("/assets/base.glb", "gltf"),
+            LoaderAssets.preload()
+        ]);
+
+        base.position.set(0, -0.1, 0);
+        base.scale.set(100, 1, 100);
+        this.scene.add(base);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         this.scene.add(ambientLight);
@@ -130,7 +142,8 @@ export class Render3JS {
 
     public animate() {
         this.animateId = requestAnimationFrame(this.animate.bind(this));
-        const delta = this.clock.getDelta();
+        this.timer.update();
+        const delta = this.timer.getDelta();
         this.updateFps();
         this.update(delta)
         this.render();
