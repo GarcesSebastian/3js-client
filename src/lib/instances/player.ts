@@ -26,7 +26,6 @@ export class Player {
     public mesh: THREE.Mesh;
     private playerGroup: THREE.Group;
     private cameraPivot: THREE.Group;
-    private meshPivot: THREE.Group;
     private uiLabel: WorldText;
     public events: PlayerEvents = new PlayerEvents();
 
@@ -44,6 +43,7 @@ export class Player {
         left: false,
         right: false,
         jumpRequested: false,
+        shooting: false,
         joystickX: 0,
         joystickY: 0
     };
@@ -66,13 +66,11 @@ export class Player {
 
     private lastEmittedPosition = new THREE.Vector3();
     private lastEmittedRotationY: number = 0;
-    private lastEmittedRotationX: number = 0;
     private lastEmitTime: number = 0;
     private readonly emitInterval: number = 15;
 
     private readonly shootCooldownMs: number = 30;
     private lastShootTime: number = 0;
-    private shootHeld: boolean = false;
 
     constructor(render: Render3JS, props: PlayerProps) {
         this.render = render;
@@ -86,7 +84,6 @@ export class Player {
 
         this.playerGroup = new THREE.Group();
         this.cameraPivot = new THREE.Group();
-        this.meshPivot = new THREE.Group();
 
         if (props.position) {
             this.playerGroup.position.copy(new THREE.Vector3(props.position.x, props.position.y, props.position.z));
@@ -107,8 +104,7 @@ export class Player {
 
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.castShadow = true;
-        this.meshPivot.add(this.mesh);
-        this.playerGroup.add(this.meshPivot);
+        this.playerGroup.add(this.mesh);
 
         this.uiLabel = new WorldText(this.username);
         this.uiLabel.sprite.position.y = 10;
@@ -196,7 +192,7 @@ export class Player {
         if (e.key === "a") this.input_direction.left = true;
         if (e.key === "d") this.input_direction.right = true;
         if (e.key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
-        if (e.key === "f" && !e.repeat) this.shootHeld = true;
+        if (e.key === "f") this.input_direction.shooting = true;
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
@@ -204,7 +200,7 @@ export class Player {
         if (e.key === "s") this.input_direction.backward = false;
         if (e.key === "a") this.input_direction.left = false;
         if (e.key === "d") this.input_direction.right = false;
-        if (e.key === "f") this.shootHeld = false;
+        if (e.key === "f") this.input_direction.shooting = false;
     };
 
     private onMouseMove = (e: MouseEvent) => {
@@ -213,12 +209,11 @@ export class Player {
     };
 
     private onMouseDown = (e: MouseEvent) => {
-        if (document.pointerLockElement !== this.render.renderer.domElement) return;
-        if (e.button === 0) this.shootHeld = true;
+        if (e.button === 0) this.input_direction.shooting = true;
     };
 
     private onMouseUp = (e: MouseEvent) => {
-        if (e.button === 0) this.shootHeld = false;
+        if (e.button === 0) this.input_direction.shooting = false;
     };
 
     private initEvents() {
@@ -242,25 +237,21 @@ export class Player {
         this.lastShootTime = now;
 
         const radius = 3;
+        const plr_position_cloned = this.playerGroup.position.clone();
 
-        const yaw = this.rotY;
-        const pitch = this.rotX;
-        const dir = new THREE.Vector3(
-            -Math.sin(yaw) * Math.cos(pitch),
-            Math.sin(pitch),
-            -Math.cos(yaw) * Math.cos(pitch)
-        ).normalize();
+        const yaw = this.playerGroup.rotation.y;
+        const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+        const spawnOffset = forward.clone().multiplyScalar((this.size.z / 2) + radius);
+        const projectile_position = plr_position_cloned.add(spawnOffset);
 
-        const spawnOffset = dir.clone().multiplyScalar((this.size.z / 2) + radius);
-        const projectile_position = this.playerGroup.position.clone().add(spawnOffset);
-
+        const rot = this.playerGroup.rotation;
         const projectile = this.render.room.createProjectile({
             id: uuidv4(),
             ownerId: this.id,
             position: { x: projectile_position.x, y: projectile_position.y, z: projectile_position.z },
-            rotation: { x: pitch, y: yaw, z: 0 },
+            rotation: { x: rot.x, y: rot.y, z: rot.z },
             radius,
-            speed: 500,
+            speed: 200,
             damage: 10,
             ttl: 10000
         });
@@ -277,7 +268,6 @@ export class Player {
     }
 
     public leave() {
-        this.shootHeld = false;
         this.render.players = this.render.players.filter(p => p.id !== this.id);
         this.render.scene.remove(this.playerGroup);
         if (this.hasController) {
@@ -304,11 +294,9 @@ export class Player {
         if (this.isDead) return;
 
         if (this.hasController) {
+            if (this.input_direction.shooting) this.shoot();
             this.playerGroup.rotation.y = this.rotY;
             this.cameraPivot.rotation.x = this.rotX;
-            this.meshPivot.rotation.x = this.rotX;
-
-            if (this.shootHeld) this.shoot();
 
             let moveX = (this.input_direction.right ? 1 : 0) - (this.input_direction.left ? 1 : 0);
             let moveZ = (this.input_direction.backward ? 1 : 0) - (this.input_direction.forward ? 1 : 0);
@@ -330,7 +318,6 @@ export class Player {
             const lerpStep = Math.min(1, this.lerpSpeed * delta);
             this.playerGroup.position.lerp(this.targetPosition, lerpStep);
             this.playerGroup.rotation.y = THREE.MathUtils.lerp(this.playerGroup.rotation.y, this.targetRotation.y, lerpStep);
-            this.meshPivot.rotation.x = THREE.MathUtils.lerp(this.meshPivot.rotation.x, this.targetRotation.x, lerpStep);
         }
     }
 
@@ -339,17 +326,15 @@ export class Player {
         const now = performance.now();
         if (now - this.lastEmitTime < this.emitInterval) return;
         const dist = this.playerGroup.position.distanceTo(this.lastEmittedPosition);
-        const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY)
-            + Math.abs(this.rotX - this.lastEmittedRotationX);
+        const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY);
 
         if (dist > 0.001 || rotDist > 0.001) {
             this.lastEmittedPosition.copy(this.playerGroup.position);
             this.lastEmittedRotationY = this.playerGroup.rotation.y;
-            this.lastEmittedRotationX = this.rotX;
             this.lastEmitTime = now;
             this.events.emitMove({
                 position: { x: this.playerGroup.position.x, y: this.playerGroup.position.y, z: this.playerGroup.position.z },
-                rotation: { x: Number(this.rotX.toFixed(4)), y: Number(this.playerGroup.rotation.y.toFixed(3)), z: 0 }
+                rotation: { x: 0, y: Number(this.playerGroup.rotation.y.toFixed(3)), z: 0 }
             });
         }
     }
