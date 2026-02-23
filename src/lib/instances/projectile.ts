@@ -54,10 +54,11 @@ export class Projectile extends ProjectileEvents {
         this.radius = props.radius;
 
         const yaw = props.rotation.y;
+        const pitch = props.rotation.x;
         this.velocity = {
-            x: -Math.sin(yaw),
-            y: 0,
-            z: -Math.cos(yaw)
+            x: -Math.sin(yaw) * Math.cos(pitch),
+            y: Math.sin(pitch),
+            z: -Math.cos(yaw) * Math.cos(pitch)
         };
 
         const elapsedMs = props.createdAt ? Math.max(0, Date.now() - props.createdAt) : 0;

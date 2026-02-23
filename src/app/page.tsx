@@ -9,6 +9,7 @@ export default function Home() {
   const [name, setName] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fireIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const joystickState = useRef({
     active: false,
@@ -200,7 +201,16 @@ export default function Home() {
                   className="w-16 h-16 rounded-full bg-red-500/20 backdrop-blur-md border border-red-400/40 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-red-500/50 transition-all"
                   onTouchStart={(e) => {
                     e.stopPropagation();
-                    render?.room.getPlayers().find(p => p.hasController)?.shoot();
+                    const player = render?.room.getPlayers().find(p => p.hasController);
+                    player?.shoot();
+                    fireIntervalRef.current = setInterval(() => player?.shoot(), 30);
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (fireIntervalRef.current) {
+                      clearInterval(fireIntervalRef.current);
+                      fireIntervalRef.current = null;
+                    }
                   }}
                 >
                   <span className="font-bold text-red-300 text-[10px] uppercase">Fire</span>
