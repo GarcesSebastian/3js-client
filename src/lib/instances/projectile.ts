@@ -91,6 +91,24 @@ export class Projectile extends ProjectileEvents {
 
         if (performance.now() - this.startTime > this.ttl) {
             this.destroy();
+            return;
+        }
+
+        for (const player of this.render.players) {
+            if (player.id === this.ownerId || player.isDead) continue;
+
+            const dist = this.mesh.position.distanceTo(player.getPosition());
+            const collisionDist = this.radius + 5;
+
+            if (dist < collisionDist) {
+                this.emitHit({
+                    id: this.id,
+                    ownerId: this.ownerId,
+                    targetId: player.id
+                });
+                this.destroy();
+                return;
+            }
         }
     }
 

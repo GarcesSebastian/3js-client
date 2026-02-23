@@ -140,6 +140,23 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         setPlayers(prev => prev.filter(p => p.id !== data.id));
     }, [render]);
 
+    const handlePlayerHealth = useCallback((data: { id: string, health: number, maxHealth: number }) => {
+        if (!render) return;
+        const player = render.room.getPlayerById(data.id);
+        if (player) {
+            player.setHealth(data.health);
+            setPlayers(prev => prev.map(p => p.id === data.id ? { ...p, health: data.health } : p));
+        }
+    }, [render]);
+
+    const handlePlayerDied = useCallback((data: { id: string }) => {
+        if (!render) return;
+        const player = render.room.getPlayerById(data.id);
+        if (player) {
+            player.setHealth(0);
+        }
+    }, [render]);
+
     useEffect(() => {
         if (render && pendingPlayers.length > 0) {
             pendingPlayers.forEach(p => {
@@ -171,6 +188,8 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         socket.on("projectile:created", handleProjectileCreated);
         socket.on("projectile:died", handleProjectileDied);
         socket.on("socket:connected:client", handleSocketConnectedClient);
+        socket.on("player:health", handlePlayerHealth);
+        socket.on("player:died", handlePlayerDied);
         socket.on("player:left", handlePlayerLeft);
 
         return () => {
@@ -180,9 +199,11 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             socket.off("projectile:created", handleProjectileCreated);
             socket.off("projectile:died", handleProjectileDied);
             socket.off("socket:connected:client", handleSocketConnectedClient);
+            socket.off("player:health", handlePlayerHealth);
+            socket.off("player:died", handlePlayerDied);
             socket.off("player:left", handlePlayerLeft);
         }
-    }, [socket, handlePlayerJoin, handlePlayerJoined, handlePlayerMoved, handleProjectileCreated, handleProjectileDied, handleSocketConnectedClient, handlePlayerLeft]);
+    }, [socket, handlePlayerJoin, handlePlayerJoined, handlePlayerMoved, handleProjectileCreated, handleProjectileDied, handlePlayerHealth, handlePlayerDied, handleSocketConnectedClient, handlePlayerLeft]);
 
     return (
         <GameContext.Provider value={{ render, players, initGame, handleJoinGame }}>

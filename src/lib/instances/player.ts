@@ -161,6 +161,12 @@ export class Player {
 
     public setHealth(health: number, callback?: (health: number) => void): void {
         this.health = health;
+        if (this.health <= 0 && !this.isDead) {
+            this.die();
+        } else if (this.health > 0 && this.isDead) {
+            this.isDead = false;
+            (this.mesh.material as THREE.MeshStandardMaterial).color.set(0x00ff00);
+        }
         if (callback) callback(this.health);
     }
 
@@ -260,6 +266,10 @@ export class Player {
 
         projectile.onDeath((data) => {
             this.render.socket.emit("projectile:death", data);
+        });
+
+        projectile.onHit((data) => {
+            this.render.socket.emit("projectile:hit", data);
         });
     }
 
