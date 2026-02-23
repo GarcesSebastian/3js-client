@@ -79,6 +79,13 @@ export class Player {
     private readonly shootCooldownMs: number = 30;
     private lastShootTime: number = 0;
 
+    private cameraDistance: number = 100;
+    private targetCameraDistance: number = 100;
+    private readonly minCameraDistance: number = 30;
+    private readonly maxCameraDistance: number = 300;
+    private readonly zoomSpeed: number = 0.2;
+    private readonly zoomLerp: number = 10;
+
     constructor(render: Render3JS, props: PlayerProps) {
         this.render = render;
         this.id = props.id;
@@ -122,7 +129,10 @@ export class Player {
         if (this.hasController) {
             this.playerGroup.add(this.cameraPivot);
             this.cameraPivot.add(this.render.camera);
-            this.render.camera.position.set(0, 30, 100);
+
+            this.cameraPivot.position.y = 25;
+
+            this.render.camera.position.set(0, 0, this.cameraDistance);
             this.render.camera.lookAt(0, 0, 0);
             this.initEvents();
         }
@@ -308,12 +318,18 @@ export class Player {
         if (e.button === 0) this.input_direction.shooting = false;
     };
 
+    private onWheel = (e: WheelEvent) => {
+        this.targetCameraDistance += e.deltaY * this.zoomSpeed;
+        this.targetCameraDistance = Math.max(this.minCameraDistance, Math.min(this.maxCameraDistance, this.targetCameraDistance));
+    };
+
     private initEvents() {
         window.addEventListener("keydown", this.onKeyDown);
         window.addEventListener("keyup", this.onKeyUp);
         window.addEventListener("mousemove", this.onMouseMove);
         window.addEventListener("mousedown", this.onMouseDown);
         window.addEventListener("mouseup", this.onMouseUp);
+        window.addEventListener("wheel", this.onWheel);
     }
 
     public jump() {
@@ -378,6 +394,7 @@ export class Player {
             window.removeEventListener("mousemove", this.onMouseMove);
             window.removeEventListener("mousedown", this.onMouseDown);
             window.removeEventListener("mouseup", this.onMouseUp);
+            window.removeEventListener("wheel", this.onWheel);
         }
     }
 
@@ -394,6 +411,9 @@ export class Player {
         this.updateWireframe();
 
         if (this.hasController) {
+            const zoomStep = Math.min(1, this.zoomLerp * delta);
+            this.cameraDistance = THREE.MathUtils.lerp(this.cameraDistance, this.targetCameraDistance, zoomStep);
+            this.render.camera.position.z = this.cameraDistance;
             if (this.input_direction.shooting) this.shoot();
             this.playerGroup.rotation.y = this.rotY;
             this.cameraPivot.rotation.x = this.rotX;
