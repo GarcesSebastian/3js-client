@@ -3,7 +3,8 @@ import { EventsListener } from "./helpers/EventsListener";
 import { Player } from "./instances/player";
 import { Physics } from "./helpers/Physics";
 import { Room } from "./instances/room";
-
+import { Projectile, ProjectileProps } from "./instances/projectile";
+import { Socket } from "socket.io-client";
 export class Render3JS {
     public scene: THREE.Scene;
     public camera: THREE.PerspectiveCamera;
@@ -17,14 +18,17 @@ export class Render3JS {
     private clock: THREE.Clock = new THREE.Clock();
 
     public players: Player[] = [];
+    public projectiles: Map<string, Projectile> = new Map();
     public physics: Physics;
     public room: Room;
+    public socket: Socket;
 
     private fpsCounter: HTMLDivElement;
     private frameCount: number = 0;
     private lastFpsUpdate: number = 0;
 
-    constructor(container?: HTMLElement) {
+    constructor(socket: Socket, container?: HTMLElement) {
+        this.socket = socket;
         new EventsListener(this);
 
         this.scene = new THREE.Scene();
@@ -134,6 +138,7 @@ export class Render3JS {
 
     public update(delta: number) {
         this.players.forEach(player => player.update(delta));
+        this.projectiles.forEach(projectile => projectile.update(delta));
         this.physics.update(delta);
     }
 

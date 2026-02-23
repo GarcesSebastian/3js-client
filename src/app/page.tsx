@@ -27,7 +27,7 @@ export default function Home() {
 
   useEffect(() => {
     setIsMobile('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    if (containerRef.current) initGame(containerRef.current);
+    if (containerRef.current) return initGame(containerRef.current);
   }, [initGame]);
 
   const handleJoin = () => {
@@ -195,15 +195,27 @@ export default function Home() {
                 </div>
               </div>
 
-              <button
-                className="absolute bottom-10 right-10 w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-white/30"
-                onTouchStart={(e) => {
-                  e.stopPropagation();
-                  render?.room.getPlayers().find(p => p.hasController)?.jump();
-                }}
-              >
-                <span className="font-bold text-white text-[10px] uppercase">Jump</span>
-              </button>
+              <div className="absolute bottom-10 right-6 flex items-center gap-4">
+                <button
+                  className="w-16 h-16 rounded-full bg-red-500/20 backdrop-blur-md border border-red-400/40 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-red-500/50 transition-all"
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    render?.room.getPlayers().find(p => p.hasController)?.shoot();
+                  }}
+                >
+                  <span className="font-bold text-red-300 text-[10px] uppercase">Fire</span>
+                </button>
+
+                <button
+                  className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-white/30 transition-all"
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    render?.room.getPlayers().find(p => p.hasController)?.jump();
+                  }}
+                >
+                  <span className="font-bold text-white text-[10px] uppercase">Jump</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

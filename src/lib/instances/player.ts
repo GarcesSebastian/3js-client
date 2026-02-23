@@ -1,22 +1,28 @@
 import * as THREE from "three";
 import { Render3JS } from "../render";
 import { WorldText } from "../helpers/WorldText";
-import { PlayerEvents } from "./PlayerEvents";
+import { PlayerEvents } from "../events/PlayerEvents";
+import { v4 as uuidv4 } from "uuid";
 
-export interface PlayerProps {
+export interface PlayerStats {
     id: string;
-    name: string;
+    username: string;
+    health: number;
+    maxHealth: number;
+    speed: number;
+    position: { x: number, y: number, z: number };
+    rotation: { x: number, y: number, z: number };
+}
+
+export interface PlayerProps extends PlayerStats {
     hasController: boolean;
-    speed?: number;
     jump_force?: number;
-    position?: THREE.Vector3;
-    maxHealth?: number;
 }
 
 export class Player {
     private render: Render3JS;
     public id: string;
-    public name: string;
+    public username: string;
     public mesh: THREE.Mesh;
     private playerGroup: THREE.Group;
     private cameraPivot: THREE.Group;
@@ -47,6 +53,12 @@ export class Player {
     private rotY: number = 0;
     private rotX: number = 0;
 
+    private size: { x: number, y: number, z: number } = {
+        x: 10,
+        y: 10,
+        z: 10
+    }
+
     private targetPosition = new THREE.Vector3();
     private targetRotation = new THREE.Euler();
     private readonly lerpSpeed: number = 20;
@@ -56,25 +68,33 @@ export class Player {
     private lastEmitTime: number = 0;
     private readonly emitInterval: number = 15;
 
+    private readonly shootCooldownMs: number = 30;
+    private lastShootTime: number = 0;
+
     constructor(render: Render3JS, props: PlayerProps) {
         this.render = render;
         this.id = props.id;
-        this.name = props.name;
+        this.username = props.username;
         this.speed = props.speed ?? 10;
         this.jump_force = props.jump_force ?? 10;
         this.hasController = props.hasController;
         this.maxHealth = props.maxHealth || 100;
-        this.health = this.maxHealth;
+        this.health = props.health || 100;
 
         this.playerGroup = new THREE.Group();
         this.cameraPivot = new THREE.Group();
 
         if (props.position) {
-            this.playerGroup.position.copy(props.position);
-            this.targetPosition.copy(props.position);
+            this.playerGroup.position.copy(new THREE.Vector3(props.position.x, props.position.y, props.position.z));
+            this.targetPosition.copy(new THREE.Vector3(props.position.x, props.position.y, props.position.z));
         }
 
-        const geometry = new THREE.BoxGeometry(10, 10, 10);
+        if (props.rotation) {
+            this.playerGroup.rotation.copy(new THREE.Euler(props.rotation.x, props.rotation.y, props.rotation.z));
+            this.targetRotation.copy(new THREE.Euler(props.rotation.x, props.rotation.y, props.rotation.z));
+        }
+
+        const geometry = new THREE.BoxGeometry(this.size.x, this.size.y, this.size.z);
         const material = new THREE.MeshStandardMaterial({
             color: 0x00ff00,
             roughness: 0.7,
@@ -85,7 +105,7 @@ export class Player {
         this.mesh.castShadow = true;
         this.playerGroup.add(this.mesh);
 
-        this.uiLabel = new WorldText(this.name);
+        this.uiLabel = new WorldText(this.username);
         this.uiLabel.sprite.position.y = 10;
         this.playerGroup.add(this.uiLabel.sprite);
 
@@ -140,6 +160,23 @@ export class Player {
         }
     }
 
+    public setHealth(health: number, callback?: (health: number) => void): void {
+        this.health = health;
+        if (callback) callback(this.health);
+    }
+
+    public getStats(): PlayerStats {
+        return {
+            id: this.id,
+            username: this.username,
+            position: this.playerGroup.position,
+            rotation: this.playerGroup.rotation,
+            health: this.health,
+            maxHealth: this.maxHealth,
+            speed: this.speed
+        };
+    }
+
     public updateRotation(deltaX: number, deltaY: number) {
         const sensitivity = 0.002;
         this.rotY -= deltaX * sensitivity;
@@ -154,6 +191,7 @@ export class Player {
         if (e.key === "a") this.input_direction.left = true;
         if (e.key === "d") this.input_direction.right = true;
         if (e.key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
+        if (e.key === "f") this.shoot();
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
@@ -179,6 +217,36 @@ export class Player {
             this.input_direction.jumpRequested = true;
             this.events.emitJumping();
         }
+    }
+
+    public shoot() {
+        const now = performance.now();
+        if (now - this.lastShootTime < this.shootCooldownMs) return;
+        this.lastShootTime = now;
+
+        const radius = 3;
+        const plr_position_cloned = this.playerGroup.position.clone();
+
+        const yaw = this.playerGroup.rotation.y;
+        const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+        const spawnOffset = forward.clone().multiplyScalar((this.size.z / 2) + radius);
+        const projectile_position = plr_position_cloned.add(spawnOffset);
+
+        const rot = this.playerGroup.rotation;
+        const projectile = this.render.room.createProjectile({
+            id: uuidv4(),
+            ownerId: this.id,
+            position: { x: projectile_position.x, y: projectile_position.y, z: projectile_position.z },
+            rotation: { x: rot.x, y: rot.y, z: rot.z },
+            radius,
+            speed: 200,
+            damage: 10,
+            ttl: 10000
+        });
+
+        projectile.onDeath((data) => {
+            this.render.socket.emit("projectile:death", data);
+        });
     }
 
     public getPosition() { return this.playerGroup.position; }
@@ -208,7 +276,7 @@ export class Player {
     }
 
     public update(delta: number) {
-        this.uiLabel.updateUI(this.name, (this.health / this.maxHealth) * 100);
+        this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
         if (this.isDead) return;
 
         if (this.hasController) {
