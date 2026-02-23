@@ -98,7 +98,7 @@ export class Projectile extends ProjectileEvents {
             if (player.id === this.ownerId || player.isDead) continue;
 
             const dist = this.mesh.position.distanceTo(player.getPosition());
-            const collisionDist = this.radius + 5;
+            const collisionDist = 10;
 
             if (dist < collisionDist) {
                 this.emitHit({

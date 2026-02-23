@@ -170,9 +170,18 @@ export default function Home() {
               </div>
               <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
                 {players.map((plr) => (
-                  <div key={plr?.id} className={`flex items-center gap-1.5 px-1.5 py-0.5 ${plr?.username === name ? 'bg-white/10 rounded' : ''}`}>
-                    <div className="w-1 h-1 rounded-full bg-green-500" />
-                    <span className="text-[9px] truncate">{plr?.username}</span>
+                  <div key={plr?.id} className={`flex flex-col gap-1 px-1.5 py-1 ${plr?.username === name ? 'bg-white/10 rounded' : ''}`}>
+                    <div className="flex items-center gap-1.5 ">
+                      <div className={`w-1.5 h-1.5 rounded-full ${plr?.health > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-[9px] truncate font-medium">{plr?.username}</span>
+                      <span className="text-[8px] ml-auto text-gray-400">{plr?.health || 0}/{plr?.maxHealth || 100}</span>
+                    </div>
+                    <div className="w-full h-[2px] bg-white/5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 transition-all duration-300"
+                        style={{ width: `${((plr?.health || 0) / (plr?.maxHealth || 100)) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
