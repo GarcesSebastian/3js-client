@@ -62,6 +62,7 @@ export class Player {
 
     private targetPosition = new THREE.Vector3();
     private targetRotation = new THREE.Euler();
+    private targetQuaternion = new THREE.Quaternion();
     private readonly lerpSpeed: number = 20;
 
     private lastEmittedPosition = new THREE.Vector3();
@@ -153,11 +154,8 @@ export class Player {
             this.playerGroup.rotation.set(x, y, z);
             this.checkAndEmitMove();
         } else {
-            const currentY = this.playerGroup.rotation.y;
-            let targetY = y;
-            while (targetY - currentY > Math.PI) targetY -= Math.PI * 2;
-            while (targetY - currentY < -Math.PI) targetY += Math.PI * 2;
-            this.targetRotation.set(x, targetY, z);
+            this.targetRotation.set(x, y, z);
+            this.targetQuaternion.setFromEuler(this.targetRotation);
         }
     }
 
@@ -182,6 +180,10 @@ export class Player {
         const sensitivity = 0.002;
         this.rotY -= deltaX * sensitivity;
         this.rotX -= deltaY * sensitivity;
+
+        const TWO_PI = Math.PI * 2;
+        this.rotY = ((this.rotY % TWO_PI) + TWO_PI) % TWO_PI;
+
         const maxPitch = Math.PI / 2 - 0.01;
         this.rotX = Math.max(-maxPitch, Math.min(maxPitch, this.rotX));
     }
@@ -317,7 +319,7 @@ export class Player {
         } else {
             const lerpStep = Math.min(1, this.lerpSpeed * delta);
             this.playerGroup.position.lerp(this.targetPosition, lerpStep);
-            this.playerGroup.rotation.y = THREE.MathUtils.lerp(this.playerGroup.rotation.y, this.targetRotation.y, lerpStep);
+            this.playerGroup.quaternion.slerp(this.targetQuaternion, lerpStep);
         }
     }
 
@@ -334,7 +336,7 @@ export class Player {
             this.lastEmitTime = now;
             this.events.emitMove({
                 position: { x: this.playerGroup.position.x, y: this.playerGroup.position.y, z: this.playerGroup.position.z },
-                rotation: { x: 0, y: Number(this.playerGroup.rotation.y.toFixed(3)), z: 0 }
+                rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 }
             });
         }
     }
