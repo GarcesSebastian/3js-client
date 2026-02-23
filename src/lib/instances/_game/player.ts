@@ -15,6 +15,8 @@ export interface PlayerStats {
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };
     velocityY?: number;
+    isMoving?: boolean;
+    isJumping?: boolean;
 }
 
 export interface PlayerProps extends PlayerStats {
@@ -34,11 +36,15 @@ export class Player {
     private currentBox: THREE.Box3 = new THREE.Box3();
 
     private debugHelper: THREE.Box3Helper | null = null;
-    public static showWireframes: boolean = true;
+    public static showWireframes: boolean = false;
 
     private playerGroup: THREE.Group = new THREE.Group();
     private cameraPivot: THREE.Group = new THREE.Group();
     private uiLabel!: WorldText;
+    private mixer: THREE.AnimationMixer | null = null;
+    private currentAction: THREE.AnimationAction | null = null;
+    private actions: Map<string, THREE.AnimationAction> = new Map();
+
     public events: PlayerEvents = new PlayerEvents();
 
     public speed: number = 10;
@@ -69,7 +75,10 @@ export class Player {
     private targetPosition = new THREE.Vector3();
     private targetRotation = new THREE.Euler();
     private targetQuaternion = new THREE.Quaternion();
-    private readonly lerpSpeed: number = 20;
+    private lerpSpeed: number = 20;
+
+    private remoteIsMoving: boolean = false;
+    private remoteIsJumping: boolean = false;
 
     private lastEmittedPosition = new THREE.Vector3();
     private lastEmittedRotationY: number = 0;
@@ -111,12 +120,24 @@ export class Player {
             this.rotY = props.rotation.y;
         }
 
-        const { name, model } = props.meshName ? LoaderAssets.getPlayerByName(props.meshName) : LoaderAssets.randomPlayer();
+        const { name, data } = props.meshName ? LoaderAssets.getPlayerByName(props.meshName) : LoaderAssets.randomPlayer();
         this.meshName = name;
-        this.mesh = model;
+        this.mesh = data.model;
         this.mesh.rotation.y = Math.PI;
         this.mesh.position.set(0, 0, 0);
         this.mesh.scale.set(10, 10, 10);
+        this.mixer = new THREE.AnimationMixer(this.mesh);
+        data.animations.forEach(clip => {
+            const name = clip.name.toLowerCase();
+            const action = this.mixer!.clipAction(clip);
+
+            if (name.includes("jump")) {
+                action.setLoop(THREE.LoopOnce, 1);
+                action.clampWhenFinished = true;
+            }
+
+            this.actions.set(name, action);
+        });
 
         this.buildCollider();
 
@@ -139,6 +160,24 @@ export class Player {
 
         this.render.scene.add(this.playerGroup);
         this.updateWireframe();
+    }
+
+    public playAnimation(name: string) {
+        const next = this.actions.get(name.toLowerCase());
+        if (!next || next === this.currentAction) return;
+
+        const isJump = name.toLowerCase().includes("jump");
+        const fadeTime = isJump ? 0.05 : 0.2;
+
+        this.currentAction?.fadeOut(fadeTime);
+        next.reset();
+
+        if (isJump) {
+            next.time = next.getClip().duration * 0.15;
+        }
+
+        next.fadeIn(fadeTime).play();
+        this.currentAction = next;
     }
 
     private buildCollider() {
@@ -230,13 +269,15 @@ export class Player {
         }
     }
 
-    public setRotation(x: number, y: number, z: number) {
+    public setRotation(x: number, y: number, z: number, isMoving?: boolean, isJumping?: boolean) {
         if (this.hasController) {
             this.playerGroup.rotation.set(x, y, z);
             this.checkAndEmitMove();
         } else {
             this.targetRotation.set(x, y, z);
             this.targetQuaternion.setFromEuler(this.targetRotation);
+            if (isMoving !== undefined) this.remoteIsMoving = isMoving;
+            if (isJumping !== undefined) this.remoteIsJumping = isJumping;
         }
     }
 
@@ -333,11 +374,8 @@ export class Player {
     }
 
     public jump() {
-        if (this.isDead) return;
-        if (!this.input_direction.jumpRequested) {
-            this.input_direction.jumpRequested = true;
-            this.events.emitJumping();
-        }
+        if (this.isDead || !this.isGrounded) return;
+        this.input_direction.jumpRequested = true;
     }
 
     public shoot() {
@@ -405,7 +443,36 @@ export class Player {
     }
 
     public update(delta: number) {
+        this.mixer?.update(delta);
         this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
+
+        if (this.hasController ? !this.isGrounded : this.remoteIsJumping) {
+            this.playAnimation("jump");
+
+            if (this.currentAction && this.currentAction.getClip().name.toLowerCase().includes("jump")) {
+                const action = this.currentAction;
+                const progress = action.time / action.getClip().duration;
+
+                if (progress > 0.8 && (this.hasController ? !this.isGrounded : this.remoteIsJumping)) {
+                    action.paused = true;
+                    action.time = action.getClip().duration * 0.8;
+                } else {
+                    action.paused = false;
+                    action.timeScale = 1.1;
+                }
+            }
+        } else {
+            if (this.currentAction) this.currentAction.paused = false;
+
+            const isMoving = this.hasController
+                ? (this.input_direction.forward || this.input_direction.backward ||
+                    this.input_direction.left || this.input_direction.right ||
+                    this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0)
+                : this.remoteIsMoving;
+
+            if (isMoving) this.playAnimation("walk");
+            else this.playAnimation("idle");
+        }
 
         this.getCollider();
         this.updateWireframe();
@@ -433,6 +500,9 @@ export class Player {
             direction.multiplyScalar(this.speed * delta);
 
             this.playerGroup.position.add(direction);
+
+            this.mesh.position.set(0, 0, 0);
+
             this.checkAndEmitMove();
         } else {
             const lerpStep = Math.min(1, this.lerpSpeed * delta);
@@ -465,10 +535,17 @@ export class Player {
             this.lastEmittedPosition.copy(pos);
             this.lastEmittedRotationY = this.playerGroup.rotation.y;
             this.lastEmitTime = now;
+
+            const isMoving = this.input_direction.forward || this.input_direction.backward ||
+                this.input_direction.left || this.input_direction.right ||
+                this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0;
+
             this.events.emitMove({
                 position: { x: pos.x, y: pos.y, z: pos.z },
                 rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 },
-                velocityY: this.velocityY
+                velocityY: this.velocityY,
+                isMoving,
+                isJumping: !this.isGrounded
             });
         }
     }

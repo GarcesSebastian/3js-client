@@ -112,9 +112,9 @@ export class Render3JS {
             LoaderAssets.preload()
         ]);
 
-        base.position.set(0, -0.1, 0);
-        base.scale.set(100, 1, 100);
-        this.scene.add(base);
+        base.model.position.set(0, -0.1, 0);
+        base.model.scale.set(100, 1, 100);
+        this.scene.add(base.model);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         this.scene.add(ambientLight);

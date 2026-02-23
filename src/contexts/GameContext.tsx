@@ -53,14 +53,18 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             health: 100,
             maxHealth: 100,
             speed: 120,
-            hasController: true
+            jump_force: 160,
+            hasController: true,
+            meshName: "Barbarian"
         });
 
         player.events.onMove((data) => {
             socket?.emit("player:move", {
                 id: player.id,
                 position: data.position,
-                rotation: data.rotation
+                rotation: data.rotation,
+                isMoving: data.isMoving,
+                isJumping: data.isJumping
             });
         });
 
@@ -114,12 +118,12 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [render]);
 
-    const handlePlayerMoved = useCallback((data: PlayerStats & { position: any, rotation: any, velocityY?: number }) => {
+    const handlePlayerMoved = useCallback((data: PlayerStats & { position: any, rotation: any, velocityY?: number, isMoving?: boolean, isJumping?: boolean }) => {
         if (!render) return;
         const player = render.room.getPlayerById(data.id);
         if (player) {
             player.setPosition(data.position.x, data.position.y, data.position.z);
-            player.setRotation(data.rotation.x, data.rotation.y, data.rotation.z);
+            player.setRotation(data.rotation.x, data.rotation.y, data.rotation.z, data.isMoving, data.isJumping);
             if (data.velocityY !== undefined) {
                 player.setVelocityY(data.velocityY);
                 player.isGrounded = data.velocityY === 0;

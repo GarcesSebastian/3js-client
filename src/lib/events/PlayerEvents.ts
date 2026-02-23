@@ -2,6 +2,8 @@ export type MoveEventData = {
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
     velocityY?: number;
+    isMoving?: boolean;
+    isJumping?: boolean;
 };
 
 export type HealthEventData = {

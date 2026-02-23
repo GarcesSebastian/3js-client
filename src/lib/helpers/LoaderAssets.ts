@@ -3,16 +3,20 @@ import { GLTFLoader, OBJLoader } from "three/examples/jsm/Addons.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 
 export type TypeLoad = "gltf" | "obj"
+export interface TemplatePayload {
+    model: THREE.Group;
+    animations: THREE.AnimationClip[];
+}
 
 export class LoaderAssets {
     private static obj_loader: OBJLoader = new OBJLoader();
     private static gltf_loader: GLTFLoader = new GLTFLoader();
 
-    public static KNIGHT_TEMPLATE: THREE.Group | null = null;
-    public static BARBARIAN_TEMPLATE: THREE.Group | null = null;
-    public static MAGE_TEMPLATE: THREE.Group | null = null;
-    public static RANGER_TEMPLATE: THREE.Group | null = null;
-    public static ROGUE_HOODED_TEMPLATE: THREE.Group | null = null;
+    public static KNIGHT_TEMPLATE: TemplatePayload | null = null;
+    public static BARBARIAN_TEMPLATE: TemplatePayload | null = null;
+    public static MAGE_TEMPLATE: TemplatePayload | null = null;
+    public static RANGER_TEMPLATE: TemplatePayload | null = null;
+    public static ROGUE_HOODED_TEMPLATE: TemplatePayload | null = null;
 
     public static async preload(): Promise<void> {
         try {
@@ -34,7 +38,7 @@ export class LoaderAssets {
         }
     }
 
-    public static getPlayerByName(name: string): { name: string, model: THREE.Group } {
+    public static getPlayerByName(name: string): { name: string, data: TemplatePayload } {
         const templates = [
             { name: "Knight", model: LoaderAssets.KNIGHT_TEMPLATE },
             { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
@@ -44,12 +48,12 @@ export class LoaderAssets {
         ];
 
         const template = templates.find(t => t.name === name);
-        if (!template) return { name: "Unknown", model: new THREE.Group() };
+        if (!template) return { name: "Unknown", data: { model: new THREE.Group(), animations: [] } };
 
-        return { name: template.name, model: this.cloneTemplate(template.model!) };
+        return { name: template.name, data: this.cloneTemplate(template.model!) };
     }
 
-    public static randomPlayer(): { name: string, model: THREE.Group } {
+    public static randomPlayer(): { name: string, data: TemplatePayload } {
         const templates = [
             { name: "Knight", model: LoaderAssets.KNIGHT_TEMPLATE },
             { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
@@ -59,13 +63,13 @@ export class LoaderAssets {
         ];
 
         const template = templates[Math.floor(Math.random() * templates.length)];
-        if (!template) return { name: "Unknown", model: new THREE.Group() };
+        if (!template) return { name: "Unknown", data: { model: new THREE.Group(), animations: [] } };
 
-        return { name: template.name, model: this.cloneTemplate(template.model!) };
+        return { name: template.name, data: this.cloneTemplate(template.model!) };
     }
 
-    public static cloneTemplate(template: THREE.Group): THREE.Group {
-        const clone = SkeletonUtils.clone(template) as THREE.Group;
+    public static cloneTemplate(template: TemplatePayload): TemplatePayload {
+        const clone = SkeletonUtils.clone(template.model) as THREE.Group;
 
         clone.traverse((node) => {
             if ((node as THREE.Mesh).isMesh) {
@@ -78,10 +82,13 @@ export class LoaderAssets {
             }
         });
 
-        return clone;
+        return {
+            model: clone,
+            animations: template.animations
+        };
     }
 
-    public static async load(source: string, type: TypeLoad): Promise<THREE.Group> {
+    public static async load(source: string, type: TypeLoad): Promise<TemplatePayload> {
         if (type == "gltf") {
             return await this.loadGLTF(source);
         }
@@ -90,13 +97,17 @@ export class LoaderAssets {
             return await this.loadObj(source);
         }
 
-        return new THREE.Group();
+        return {
+            model: new THREE.Group(),
+            animations: []
+        };
     }
 
-    private static loadGLTF(source: string): Promise<THREE.Group> {
+    private static loadGLTF(source: string): Promise<TemplatePayload> {
         return new Promise((resolve, reject) => {
             LoaderAssets.gltf_loader.load(source, (gltf) => {
                 const model = gltf.scene;
+                console.log(gltf.animations)
                 model.traverse((child) => {
                     if ((child as THREE.Mesh).isMesh) {
                         const mesh = child as THREE.Mesh;
@@ -115,12 +126,15 @@ export class LoaderAssets {
                     }
                 });
 
-                resolve(model);
+                resolve({
+                    model,
+                    animations: gltf.animations
+                });
             }, undefined, (error) => reject(error));
         });
     }
 
-    private static loadObj(source: string): Promise<THREE.Group> {
+    private static loadObj(source: string): Promise<TemplatePayload> {
         return new Promise((resolve, reject) => {
             LoaderAssets.obj_loader.load(source, (object) => {
                 object.traverse((child) => {
@@ -130,7 +144,11 @@ export class LoaderAssets {
                         mesh.receiveShadow = true;
                     }
                 });
-                resolve(object as unknown as THREE.Group);
+
+                resolve({
+                    model: object as unknown as THREE.Group,
+                    animations: []
+                });
             }, undefined, (error) => reject(error));
         });
     }
