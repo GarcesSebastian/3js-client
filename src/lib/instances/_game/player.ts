@@ -450,8 +450,6 @@ export class Player {
         if (key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
         if (key === "f") this.input_direction.shooting = true;
         if (key === "shift") this.run();
-
-        if (key === "k") this.die();
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
