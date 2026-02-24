@@ -58,6 +58,13 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             hasController: true
         });
 
+        player.playAnimationSequence("Spawn_Air", {
+            atPercent: 1.0,
+            pauseFor: 0,
+            speedBefore: 1.0,
+            speedAfter: 1.0
+        });
+
         player.events.onMove((data) => {
             socket?.emit("player:move", {
                 id: player.id,
@@ -84,9 +91,16 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
         if (render.room.getPlayerById(data.id)) return;
 
-        render.room.createPlayer({
+        const plr = render.room.createPlayer({
             ...data,
             hasController: false,
+        });
+
+        plr.playAnimationSequence("Spawn_Air", {
+            atPercent: 1.0,
+            pauseFor: 0,
+            speedBefore: 1.0,
+            speedAfter: 1.0
         });
 
         setPlayers(prev => [...prev, data]);

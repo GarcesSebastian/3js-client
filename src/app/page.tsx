@@ -197,46 +197,49 @@ export default function Home() {
       {gameJoined && (
         <div className="fixed inset-0 pointer-events-none z-20">
           {isDead && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-1000 pointer-events-auto">
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-xl animate-in fade-in duration-700 pointer-events-auto">
               <div className="absolute inset-0 shadow-[inset_0_0_250px_rgba(0,0,0,1)] bg-gradient-to-t from-red-950/40 via-transparent to-black/40 pointer-events-none" />
 
-              <div className="relative flex flex-col items-center gap-1 scale-110">
-                <div className="relative group">
-                  <h2 className="text-8xl font-black tracking-tight text-white uppercase italic drop-shadow-[0_0_50px_rgba(220,38,38,0.8)] animate-pulse">
+              <div className="relative flex flex-col items-center gap-1 scale-90 sm:scale-100 md:scale-110">
+                <div className="relative group px-4 text-center">
+                  <h2 className="text-5xl sm:text-7xl md:text-8xl font-black tracking-tighter text-white uppercase italic drop-shadow-[0_0_50px_rgba(220,38,38,0.8)] animate-pulse leading-none">
                     HAS MUERTO
                   </h2>
-                  <div className="absolute -inset-x-24 top-1/2 h-[1px] bg-red-500/30 blur-sm" />
+                  <div className="absolute -inset-x-12 sm:-inset-x-24 top-1/2 h-[1px] bg-red-500/30 blur-sm hidden sm:block" />
                 </div>
 
-                <div className="flex flex-col items-center mt-12 gap-6 text-white/90">
+                <div className="flex flex-col items-center mt-8 sm:mt-12 gap-4 sm:gap-6 text-white/90">
                   <div className="flex items-center gap-4">
-                    <div className="h-[1px] w-16 bg-gradient-to-l from-white/20 to-transparent" />
-                    <span className="text-white/40 text-[9px] font-bold uppercase tracking-[0.6em]">REAPARECIENDO</span>
-                    <div className="h-[1px] w-16 bg-gradient-to-r from-white/20 to-transparent" />
+                    <div className="h-[1px] w-12 sm:w-16 bg-gradient-to-l from-white/20 to-transparent" />
+                    <span className="text-white/40 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.4em] sm:tracking-[0.6em]">REAPARECIENDO</span>
+                    <div className="h-[1px] w-12 sm:w-16 bg-gradient-to-r from-white/20 to-transparent" />
                   </div>
 
                   <div className="relative flex items-center justify-center">
-                    <div className="text-8xl font-black text-white font-mono tabular-nums leading-none tracking-tighter drop-shadow-2xl">
+                    <div className="text-6xl sm:text-8xl font-black text-white font-mono tabular-nums leading-none tracking-tighter drop-shadow-2xl">
                       0{displaySeconds}
                     </div>
-                    <svg className="absolute w-40 h-40 -rotate-90">
+                    <svg className="absolute w-28 h-28 sm:w-40 sm:h-40 -rotate-90">
                       <circle
-                        cx="80"
-                        cy="80"
-                        r="76"
+                        cx="50%"
+                        cy="50%"
+                        r="38%"
                         fill="transparent"
                         stroke="rgba(255, 255, 255, 0.03)"
                         strokeWidth="1.5"
                       />
                       <circle
-                        cx="80"
-                        cy="80"
-                        r="76"
+                        cx="50%"
+                        cy="50%"
+                        r="38%"
                         fill="transparent"
                         stroke="rgba(220, 38, 38, 0.4)"
                         strokeWidth="2"
-                        strokeDasharray="477"
-                        strokeDashoffset={477 - (477 * progress)}
+                        strokeDasharray="240"
+                        style={{
+                          strokeDashoffset: (240 - (240 * progress)),
+                          transition: 'stroke-dashoffset 0.1s linear'
+                        }}
                         strokeLinecap="round"
                       />
                     </svg>
@@ -283,39 +286,69 @@ export default function Home() {
                 onTouchEnd={onJoystickEnd}
               >
                 <div className="w-28 h-28 rounded-full border border-white/10 bg-white/5 backdrop-blur-md flex items-center justify-center relative shadow-inner">
-                  <div className="w-10 h-10 bg-white/90 rounded-full shadow-lg flex items-center justify-center"
+                  <div className="w-10 h-10 bg-white/90 rounded-full shadow-lg flex items-center justify-center transition-transform duration-75"
                     style={{ transform: `translate(${joystickUI.currentX}px, ${joystickUI.currentY}px)` }}>
                     <div className="w-4 h-4 rounded-full border border-black/10" />
                   </div>
                 </div>
               </div>
 
-              <div className="absolute bottom-10 right-6 flex items-center gap-4 text-white/90">
-                <button
-                  className="w-16 h-16 rounded-full bg-red-500/20 backdrop-blur-md border border-red-400/40 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-red-500/50 transition-all font-bold text-[10px] uppercase tracking-wider"
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    const player = render?.room.getPlayers().find(p => p.hasController);
-                    if (player) player.input_direction.shooting = true;
-                  }}
-                  onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    const player = render?.room.getPlayers().find(p => p.hasController);
-                    if (player) player.input_direction.shooting = false;
-                  }}
-                >
-                  Fire
-                </button>
+              <div className="absolute bottom-10 right-8 flex flex-col gap-4 pointer-events-auto">
+                <div className="flex gap-4 items-end">
+                  <button
+                    className="w-16 h-16 rounded-full bg-white/5 backdrop-blur-lg border border-white/10 flex items-center justify-center active:scale-95 active:bg-white/20 transition-all shadow-xl"
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      render?.room.getPlayers().find(p => p.hasController)?.run();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      render?.room.getPlayers().find(p => p.hasController)?.noRun();
+                    }}
+                  >
+                    <div className="flex flex-col items-center">
+                      <span className="text-[8px] font-black tracking-widest text-white/40 uppercase">Sprint</span>
+                      <svg className="w-5 h-5 text-white mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                  </button>
 
-                <button
-                  className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center pointer-events-auto active:scale-90 active:bg-white/30 transition-all font-bold text-[10px] uppercase tracking-wider"
-                  onTouchStart={(e) => {
-                    e.stopPropagation();
-                    render?.room.getPlayers().find(p => p.hasController)?.jump();
-                  }}
-                >
-                  Jump
-                </button>
+                  <button
+                    className="w-20 h-20 rounded-full bg-red-500/10 backdrop-blur-lg border border-red-500/30 flex items-center justify-center active:scale-90 active:bg-red-500/40 transition-all shadow-[0_0_30px_rgba(239,68,68,0.2)]"
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      const player = render?.room.getPlayers().find(p => p.hasController);
+                      if (player) player.input_direction.shooting = true;
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      const player = render?.room.getPlayers().find(p => p.hasController);
+                      if (player) player.input_direction.shooting = false;
+                    }}
+                  >
+                    <div className="w-10 h-10 rounded-full border-2 border-red-500/50 flex items-center justify-center">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                    </div>
+                  </button>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    className="w-16 h-16 rounded-full bg-white/5 backdrop-blur-lg border border-white/10 flex items-center justify-center active:scale-95 active:bg-white/20 transition-all shadow-xl"
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      render?.room.getPlayers().find(p => p.hasController)?.jump();
+                    }}
+                  >
+                    <div className="flex flex-col items-center">
+                      <span className="text-[8px] font-black tracking-widest text-white/40 uppercase">Jump</span>
+                      <svg className="w-5 h-5 text-white mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           )}

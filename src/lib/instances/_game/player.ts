@@ -46,17 +46,26 @@ export class Player {
     private actions: Map<string, THREE.AnimationAction> = new Map();
 
     public events: PlayerEvents = new PlayerEvents();
+    private isAnimationLocked: boolean = false;
+    private currentActionName: string = "";
+    private animationSequence: {
+        name: string,
+        targetTime: number,
+        pauseDuration: number,
+        pauseElapsed: number,
+        speedAfter: number,
+        nextAnimation?: string,
+        state: 'playing_to_target' | 'paused' | 'finishing'
+    } | null = null;
 
     private backup_speed: number = 10;
     public speed: number = 10;
     public jump_force: number = 10;
     public hasController: boolean = false;
-
     public health: number = 100;
     public maxHealth: number = 100;
     public isSprinting: boolean = false;
     public isDead: boolean = false;
-
     public input_direction = {
         forward: false,
         backward: false,
@@ -67,22 +76,17 @@ export class Player {
         joystickX: 0,
         joystickY: 0
     };
-
     public velocityY: number = 0;
     public isGrounded: boolean = true;
-
     private isMoving: boolean = false;
     private isJumping: boolean = false;
     private lastRemoteJumping: boolean = false;
-
     private rotY: number = 0;
     private rotX: number = 0;
-
     private targetPosition = new THREE.Vector3();
     private targetRotation = new THREE.Euler();
     private targetQuaternion = new THREE.Quaternion();
     private lerpSpeed: number = 20;
-
     private lastEmittedPosition = new THREE.Vector3();
     private lastEmittedRotationY: number = 0;
     private lastEmitTime: number = 0;
@@ -90,10 +94,8 @@ export class Player {
     private lastSentIsSprinting: boolean = false;
     private lastSentIsJumping: boolean = false;
     private readonly emitInterval: number = 15;
-
     private readonly shootCooldownMs: number = 30;
     private lastShootTime: number = 0;
-
     private cameraDistance: number = 100;
     private targetCameraDistance: number = 100;
     private readonly minCameraDistance: number = 30;
@@ -138,6 +140,7 @@ export class Player {
         data.animations.forEach(clip => {
             const name = clip.name.toLowerCase();
             const action = this.mixer!.clipAction(clip);
+            action.clampWhenFinished = true;
             this.actions.set(name, action);
         });
 
@@ -164,17 +167,102 @@ export class Player {
         this.updateWireframe();
     }
 
-    public playAnimation(name: string) {
+    public playAnimation(name: string, options: {
+        speed?: number,
+        fadeTime?: number,
+        loop?: THREE.AnimationActionLoopStyles,
+        repetitions?: number,
+        force?: boolean,
+        atPercent?: number
+    } = {}) {
         const next = this.actions.get(name.toLowerCase());
-        if (!next || next === this.currentAction) return;
+        if (!next || (next === this.currentAction && !options.force)) return;
+        if (this.isAnimationLocked && !options.force) return;
 
-        const fadeTime = 0.2;
+        const fadeTime = options.fadeTime ?? 0.2;
 
-        this.currentAction?.fadeOut(fadeTime);
+        if (this.currentAction) {
+            this.currentAction.fadeOut(fadeTime);
+        }
+
         next.reset();
+        next.setEffectiveWeight(1);
+        next.setEffectiveTimeScale(options.speed ?? 1);
+
+        if (options.loop !== undefined) {
+            next.setLoop(options.loop, options.repetitions ?? Infinity);
+        }
+
+        if (options.atPercent !== undefined) {
+            next.time = next.getClip().duration * options.atPercent;
+        }
 
         next.fadeIn(fadeTime).play();
         this.currentAction = next;
+        this.currentActionName = name.toLowerCase();
+    }
+
+    public playAnimationSequence(name: string, sequence: {
+        atPercent: number,
+        pauseFor: number,
+        speedBefore?: number,
+        speedAfter?: number,
+        nextAnimation?: string
+    }) {
+        const next = this.actions.get(name.toLowerCase());
+        if (!next) return;
+
+        this.isAnimationLocked = true;
+        const duration = next.getClip().duration;
+
+        this.animationSequence = {
+            name: name.toLowerCase(),
+            targetTime: duration * sequence.atPercent,
+            pauseDuration: sequence.pauseFor,
+            pauseElapsed: 0,
+            speedAfter: sequence.speedAfter ?? 1,
+            nextAnimation: sequence.nextAnimation,
+            state: 'playing_to_target'
+        };
+
+        this.playAnimation(name, {
+            speed: sequence.speedBefore ?? 1,
+            loop: THREE.LoopOnce,
+            force: true
+        });
+    }
+
+    private updateAnimationSequence(delta: number) {
+        if (!this.animationSequence || !this.currentAction) return;
+
+        const seq = this.animationSequence;
+
+        if (seq.state === 'playing_to_target') {
+            if (this.currentAction.time >= seq.targetTime) {
+                this.currentAction.paused = true;
+                this.currentAction.time = seq.targetTime;
+                seq.state = 'paused';
+            }
+        } else if (seq.state === 'paused') {
+            seq.pauseElapsed += delta * 1000;
+            if (seq.pauseElapsed >= seq.pauseDuration) {
+                this.currentAction.paused = false;
+                this.currentAction.setEffectiveTimeScale(seq.speedAfter);
+                seq.state = 'finishing';
+            }
+        } else if (seq.state === 'finishing') {
+            const clip = this.currentAction.getClip();
+            if (this.currentAction.time >= clip.duration - 0.05) {
+                const nextAnim = seq.nextAnimation;
+                this.isAnimationLocked = false;
+                this.animationSequence = null;
+
+                if (nextAnim) {
+                    this.playAnimation(nextAnim, { loop: THREE.LoopRepeat });
+                    this.isAnimationLocked = true;
+                }
+            }
+        }
     }
 
     private buildCollider() {
@@ -247,6 +335,12 @@ export class Player {
             }
         });
 
+        this.playAnimationSequence("Death_A", {
+            atPercent: 1.0,
+            pauseFor: 0,
+            nextAnimation: "Death_A_Pose"
+        });
+
         if (this.debugHelper) this.debugHelper.visible = false;
         this.events.emitDeath();
     }
@@ -307,6 +401,14 @@ export class Player {
                     }
                 }
             });
+
+            this.playAnimationSequence("Spawn_Air", {
+                atPercent: 1.0,
+                pauseFor: 0,
+                speedBefore: 1.0,
+                speedAfter: 1.0
+            });
+
             if (this.debugHelper) this.debugHelper.visible = Player.showWireframes;
         }
 
@@ -348,6 +450,8 @@ export class Player {
         if (key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
         if (key === "f") this.input_direction.shooting = true;
         if (key === "shift") this.run();
+
+        if (key === "k") this.die();
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
@@ -483,6 +587,7 @@ export class Player {
     }
 
     public update(delta: number) {
+        this.updateAnimationSequence(delta);
         this.mixer?.update(delta);
         this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
 
@@ -500,6 +605,14 @@ export class Player {
         ) : (
             !this.isGrounded || this.isJumping
         );
+
+        if (this.isDead) {
+            if (!this.isAnimationLocked && this.currentActionName !== "death_a_pose") {
+                this.playAnimation("Death_A_Pose", { loop: THREE.LoopRepeat });
+                this.isAnimationLocked = true;
+            }
+            return;
+        }
 
         if (this.hasController && this.input_direction.jumpRequested && this.isGrounded) {
             this.playAnimation("Jump_Start");
