@@ -47,10 +47,6 @@ export class Render3JS {
         this.renderer = new THREE.WebGLRenderer({
             antialias: true,
             powerPreference: "high-performance",
-            precision: "mediump",
-            alpha: false,
-            stencil: false,
-            depth: true
         })
         this.renderer.setSize(this.width, this.height);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));

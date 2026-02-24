@@ -47,12 +47,14 @@ export class Player {
 
     public events: PlayerEvents = new PlayerEvents();
 
+    private backup_speed: number = 10;
     public speed: number = 10;
     public jump_force: number = 10;
     public hasController: boolean = false;
 
     public health: number = 100;
     public maxHealth: number = 100;
+    public isSprinting: boolean = false;
     public isDead: boolean = false;
 
     public input_direction = {
@@ -69,6 +71,10 @@ export class Player {
     public velocityY: number = 0;
     public isGrounded: boolean = true;
 
+    private isMoving: boolean = false;
+    private isJumping: boolean = false;
+    private lastRemoteJumping: boolean = false;
+
     private rotY: number = 0;
     private rotX: number = 0;
 
@@ -77,12 +83,12 @@ export class Player {
     private targetQuaternion = new THREE.Quaternion();
     private lerpSpeed: number = 20;
 
-    private remoteIsMoving: boolean = false;
-    private remoteIsJumping: boolean = false;
-
     private lastEmittedPosition = new THREE.Vector3();
     private lastEmittedRotationY: number = 0;
     private lastEmitTime: number = 0;
+    private lastSentIsMoving: boolean = false;
+    private lastSentIsSprinting: boolean = false;
+    private lastSentIsJumping: boolean = false;
     private readonly emitInterval: number = 15;
 
     private readonly shootCooldownMs: number = 30;
@@ -99,6 +105,7 @@ export class Player {
         this.render = render;
         this.id = props.id;
         this.username = props.username;
+        this.backup_speed = props.speed ?? 80;
         this.speed = props.speed ?? 80;
         this.jump_force = props.jump_force ?? 10;
         this.hasController = props.hasController;
@@ -126,16 +133,11 @@ export class Player {
         this.mesh.rotation.y = Math.PI;
         this.mesh.position.set(0, 0, 0);
         this.mesh.scale.set(10, 10, 10);
+
         this.mixer = new THREE.AnimationMixer(this.mesh);
         data.animations.forEach(clip => {
             const name = clip.name.toLowerCase();
             const action = this.mixer!.clipAction(clip);
-
-            if (name.includes("jump")) {
-                action.setLoop(THREE.LoopOnce, 1);
-                action.clampWhenFinished = true;
-            }
-
             this.actions.set(name, action);
         });
 
@@ -166,15 +168,10 @@ export class Player {
         const next = this.actions.get(name.toLowerCase());
         if (!next || next === this.currentAction) return;
 
-        const isJump = name.toLowerCase().includes("jump");
-        const fadeTime = isJump ? 0.05 : 0.2;
+        const fadeTime = 0.2;
 
         this.currentAction?.fadeOut(fadeTime);
         next.reset();
-
-        if (isJump) {
-            next.time = next.getClip().duration * 0.15;
-        }
 
         next.fadeIn(fadeTime).play();
         this.currentAction = next;
@@ -269,15 +266,29 @@ export class Player {
         }
     }
 
-    public setRotation(x: number, y: number, z: number, isMoving?: boolean, isJumping?: boolean) {
+    public setIsMoving(isMoving: boolean) {
+        if (!this.hasController) {
+            this.isMoving = isMoving;
+        }
+    }
+
+    public setIsJumping(isJumping: boolean) {
+        if (!this.hasController) {
+            if (isJumping && !this.lastRemoteJumping && this.isGrounded) {
+                this.jump();
+            }
+            this.isJumping = isJumping;
+            this.lastRemoteJumping = isJumping;
+        }
+    }
+
+    public setRotation(x: number, y: number, z: number) {
         if (this.hasController) {
             this.playerGroup.rotation.set(x, y, z);
             this.checkAndEmitMove();
         } else {
             this.targetRotation.set(x, y, z);
             this.targetQuaternion.setFromEuler(this.targetRotation);
-            if (isMoving !== undefined) this.remoteIsMoving = isMoving;
-            if (isJumping !== undefined) this.remoteIsJumping = isJumping;
         }
     }
 
@@ -329,20 +340,24 @@ export class Player {
 
     private onKeyDown = (e: KeyboardEvent) => {
         if (this.isDead) return;
-        if (e.key === "w") this.input_direction.forward = true;
-        if (e.key === "s") this.input_direction.backward = true;
-        if (e.key === "a") this.input_direction.left = true;
-        if (e.key === "d") this.input_direction.right = true;
-        if (e.key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
-        if (e.key === "f") this.input_direction.shooting = true;
+        const key = e.key.toLowerCase();
+        if (key === "w") this.input_direction.forward = true;
+        if (key === "s") this.input_direction.backward = true;
+        if (key === "a") this.input_direction.left = true;
+        if (key === "d") this.input_direction.right = true;
+        if (key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
+        if (key === "f") this.input_direction.shooting = true;
+        if (key === "shift") this.run();
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
-        if (e.key === "w") this.input_direction.forward = false;
-        if (e.key === "s") this.input_direction.backward = false;
-        if (e.key === "a") this.input_direction.left = false;
-        if (e.key === "d") this.input_direction.right = false;
-        if (e.key === "f") this.input_direction.shooting = false;
+        const key = e.key.toLowerCase();
+        if (key === "w") this.input_direction.forward = false;
+        if (key === "s") this.input_direction.backward = false;
+        if (key === "a") this.input_direction.left = false;
+        if (key === "d") this.input_direction.right = false;
+        if (key === "f") this.input_direction.shooting = false;
+        if (key === "shift") this.noRun();
     };
 
     private onMouseMove = (e: MouseEvent) => {
@@ -376,6 +391,31 @@ export class Player {
     public jump() {
         if (this.isDead || !this.isGrounded) return;
         this.input_direction.jumpRequested = true;
+
+        if (!this.hasController) {
+            this.velocityY = this.jump_force;
+            this.isGrounded = false;
+        }
+    }
+
+    public move() {
+        if (this.isDead) return;
+        this.isMoving = true;
+    }
+
+    public noMove() {
+        if (this.isDead) return;
+        this.isMoving = false;
+    }
+
+    public run() {
+        if (this.isDead) return;
+        this.isSprinting = true;
+    }
+
+    public noRun() {
+        if (this.isDead) return;
+        this.isSprinting = false;
     }
 
     public shoot() {
@@ -446,32 +486,33 @@ export class Player {
         this.mixer?.update(delta);
         this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
 
-        if (this.hasController ? !this.isGrounded : this.remoteIsJumping) {
-            this.playAnimation("jump");
+        if (this.isSprinting) this.speed = this.backup_speed * 1.5;
+        else this.speed = this.backup_speed;
 
-            if (this.currentAction && this.currentAction.getClip().name.toLowerCase().includes("jump")) {
-                const action = this.currentAction;
-                const progress = action.time / action.getClip().duration;
+        const isMovingState = this.hasController ? (
+            this.input_direction.forward || this.input_direction.backward ||
+            this.input_direction.left || this.input_direction.right ||
+            this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0
+        ) : this.isMoving;
 
-                if (progress > 0.8 && (this.hasController ? !this.isGrounded : this.remoteIsJumping)) {
-                    action.paused = true;
-                    action.time = action.getClip().duration * 0.8;
-                } else {
-                    action.paused = false;
-                    action.timeScale = 1.1;
-                }
-            }
+        const isJumpingState = this.hasController ? (
+            !this.isGrounded || this.input_direction.jumpRequested
+        ) : (
+            !this.isGrounded || this.isJumping
+        );
+
+        if (this.hasController && this.input_direction.jumpRequested && this.isGrounded) {
+            this.playAnimation("Jump_Start");
+        } else if (isJumpingState) {
+            this.playAnimation("Jump_Idle");
+        } else if (isMovingState && this.isGrounded) {
+            if (this.isSprinting) this.playAnimation("Running_A");
+            else this.playAnimation("Walking_B");
         } else {
-            if (this.currentAction) this.currentAction.paused = false;
-
-            const isMoving = this.hasController
-                ? (this.input_direction.forward || this.input_direction.backward ||
-                    this.input_direction.left || this.input_direction.right ||
-                    this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0)
-                : this.remoteIsMoving;
-
-            if (isMoving) this.playAnimation("walk");
-            else this.playAnimation("idle");
+            this.playAnimation("Idle_A");
+            if (!this.hasController) {
+                this.input_direction.jumpRequested = false;
+            }
         }
 
         this.getCollider();
@@ -531,21 +572,32 @@ export class Player {
         const rotDist = Math.abs(this.playerGroup.rotation.y - this.lastEmittedRotationY);
         const isAirborne = !this.isGrounded || Math.abs(this.velocityY) > 0.1;
 
-        if (dist > 0.001 || rotDist > 0.001 || isAirborne) {
+        const isMoving = this.input_direction.forward || this.input_direction.backward ||
+            this.input_direction.left || this.input_direction.right ||
+            this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0;
+
+        const isJumping = !this.isGrounded;
+        const isSprinting = this.isSprinting;
+
+        const stateChanged = isMoving !== this.lastSentIsMoving ||
+            isSprinting !== this.lastSentIsSprinting ||
+            isJumping !== this.lastSentIsJumping;
+
+        if (dist > 0.001 || rotDist > 0.001 || isAirborne || stateChanged) {
             this.lastEmittedPosition.copy(pos);
             this.lastEmittedRotationY = this.playerGroup.rotation.y;
             this.lastEmitTime = now;
-
-            const isMoving = this.input_direction.forward || this.input_direction.backward ||
-                this.input_direction.left || this.input_direction.right ||
-                this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0;
+            this.lastSentIsMoving = isMoving;
+            this.lastSentIsSprinting = isSprinting;
+            this.lastSentIsJumping = isJumping;
 
             this.events.emitMove({
                 position: { x: pos.x, y: pos.y, z: pos.z },
                 rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 },
                 velocityY: this.velocityY,
                 isMoving,
-                isJumping: !this.isGrounded
+                isSprinting,
+                isJumping
             });
         }
     }

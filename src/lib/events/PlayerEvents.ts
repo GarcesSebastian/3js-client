@@ -3,6 +3,7 @@ export type MoveEventData = {
     rotation: { x: number; y: number; z: number };
     velocityY?: number;
     isMoving?: boolean;
+    isSprinting?: boolean;
     isJumping?: boolean;
 };
 

@@ -1,9 +1,11 @@
+import * as THREE from "three";
 import { Render3JS } from "../render";
 import { Player } from "../instances/_game/player";
 
 export class Physics {
     private render: Render3JS;
     private worker: Worker;
+    private sentPosition: THREE.Vector3 = new THREE.Vector3();
     private isCalculating: boolean = false;
 
     constructor(render: Render3JS) {
@@ -21,7 +23,17 @@ export class Physics {
             const { position, velocityY, isGrounded, jumpProcessed } = e.data;
             const local = this.getLocalPlayer();
             if (local) {
-                local.setPosition(position.x, position.y, position.z);
+                const correctionX = position.x - this.sentPosition.x;
+                const correctionY = position.y - this.sentPosition.y;
+                const correctionZ = position.z - this.sentPosition.z;
+
+                const currentPos = local.getPosition();
+                local.setPosition(
+                    currentPos.x + correctionX,
+                    currentPos.y + correctionY,
+                    currentPos.z + correctionZ
+                );
+
                 local.velocityY = velocityY;
                 local.isGrounded = isGrounded;
                 if (jumpProcessed) {
@@ -42,6 +54,7 @@ export class Physics {
 
         const localCollider = local.getCollider();
         const localPos = local.getPosition();
+        this.sentPosition.copy(localPos);
 
         const obstacles = this.render.players
             .filter(p => !p.hasController && !p.isDead)

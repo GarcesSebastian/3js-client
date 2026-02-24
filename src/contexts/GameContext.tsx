@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import Cookies from "js-cookie";
 import { PlayerStats } from "@/lib/instances/_game/player";
 import { ProjectileProps } from "@/lib/instances/_game/projectile";
+import { PlayerMoveData } from "@/types/socket-events";
 
 interface GameContextProps {
     render: Render3JS | null;
@@ -54,8 +55,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             maxHealth: 100,
             speed: 120,
             jump_force: 160,
-            hasController: true,
-            meshName: "Barbarian"
+            hasController: true
         });
 
         player.events.onMove((data) => {
@@ -64,6 +64,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
                 position: data.position,
                 rotation: data.rotation,
                 isMoving: data.isMoving,
+                isSprinting: data.isSprinting,
                 isJumping: data.isJumping
             });
         });
@@ -118,16 +119,16 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [render]);
 
-    const handlePlayerMoved = useCallback((data: PlayerStats & { position: any, rotation: any, velocityY?: number, isMoving?: boolean, isJumping?: boolean }) => {
+    const handlePlayerMoved = useCallback((data: PlayerMoveData) => {
         if (!render) return;
         const player = render.room.getPlayerById(data.id);
         if (player) {
             player.setPosition(data.position.x, data.position.y, data.position.z);
-            player.setRotation(data.rotation.x, data.rotation.y, data.rotation.z, data.isMoving, data.isJumping);
-            if (data.velocityY !== undefined) {
-                player.setVelocityY(data.velocityY);
-                player.isGrounded = data.velocityY === 0;
-            }
+            player.setRotation(data.rotation.x, data.rotation.y, data.rotation.z);
+            player.setIsMoving(data.isMoving ?? false);
+            if (data.isSprinting) player.run();
+            else player.noRun();
+            player.setIsJumping(data.isJumping ?? false);
         }
     }, [render]);
 

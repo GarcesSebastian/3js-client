@@ -17,21 +17,24 @@ export class LoaderAssets {
     public static MAGE_TEMPLATE: TemplatePayload | null = null;
     public static RANGER_TEMPLATE: TemplatePayload | null = null;
     public static ROGUE_HOODED_TEMPLATE: TemplatePayload | null = null;
+    public static ROGUE_TEMPLATE: TemplatePayload | null = null;
 
     public static async preload(): Promise<void> {
         try {
-            const [KNIGHT, BARBARIAN, MAGE, RANGER, ROGUE_HOODED] = await Promise.all([
+            const [KNIGHT, BARBARIAN, MAGE, RANGER, ROGUE, ROGUE_HOODED] = await Promise.all([
                 LoaderAssets.load("/assets/characters/Knight.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Barbarian.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Mage.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Ranger.glb", "gltf"),
-                LoaderAssets.load("/assets/characters/Rogue_Hooded.glb", "gltf")
+                LoaderAssets.load("/assets/characters/Rogue.glb", "gltf"),
+                LoaderAssets.load("/assets/characters/Rogue_Hooded.glb", "gltf"),
             ]);
 
             LoaderAssets.KNIGHT_TEMPLATE = KNIGHT;
             LoaderAssets.BARBARIAN_TEMPLATE = BARBARIAN;
             LoaderAssets.MAGE_TEMPLATE = MAGE;
             LoaderAssets.RANGER_TEMPLATE = RANGER;
+            LoaderAssets.ROGUE_TEMPLATE = ROGUE;
             LoaderAssets.ROGUE_HOODED_TEMPLATE = ROGUE_HOODED;
         } catch (error) {
             console.error("Error preloading assets:", error);
@@ -44,6 +47,7 @@ export class LoaderAssets {
             { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
             { name: "Mage", model: LoaderAssets.MAGE_TEMPLATE },
             { name: "Ranger", model: LoaderAssets.RANGER_TEMPLATE },
+            { name: "Rogue", model: LoaderAssets.ROGUE_TEMPLATE },
             { name: "Rogue Hooded", model: LoaderAssets.ROGUE_HOODED_TEMPLATE }
         ];
 
@@ -59,6 +63,7 @@ export class LoaderAssets {
             { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
             { name: "Mage", model: LoaderAssets.MAGE_TEMPLATE },
             { name: "Ranger", model: LoaderAssets.RANGER_TEMPLATE },
+            { name: "Rogue", model: LoaderAssets.ROGUE_TEMPLATE },
             { name: "Rogue Hooded", model: LoaderAssets.ROGUE_HOODED_TEMPLATE }
         ];
 
@@ -107,7 +112,7 @@ export class LoaderAssets {
         return new Promise((resolve, reject) => {
             LoaderAssets.gltf_loader.load(source, (gltf) => {
                 const model = gltf.scene;
-                console.log(gltf.animations)
+                console.log(source.split("/").pop(), gltf.animations)
                 model.traverse((child) => {
                     if ((child as THREE.Mesh).isMesh) {
                         const mesh = child as THREE.Mesh;
