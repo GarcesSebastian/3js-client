@@ -38,7 +38,7 @@ export class LoaderAssets {
                 LoaderAssets.load("/assets/characters/Ranger.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Rogue.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Rogue_Hooded.glb", "gltf"),
-                LoaderAssets.load("/assets/weapons/staff.glb", "gltf")
+                LoaderAssets.load("/assets/weapons/Staff.glb", "gltf")
             ]);
 
             LoaderAssets.KNIGHT_TEMPLATE = KNIGHT;
