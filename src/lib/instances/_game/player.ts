@@ -15,8 +15,8 @@ export interface PlayerStats {
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };
     velocityY?: number;
-    isMoving?: boolean;
     isJumping?: boolean;
+    shootCooldownMs?: number;
 }
 
 export interface PlayerProps extends PlayerStats {
@@ -55,9 +55,15 @@ export class Player {
         pauseElapsed: number,
         speedAfter: number,
         nextAnimation?: string,
+        onEventAt?: number,
+        onEvent?: () => void,
+        eventDone?: boolean,
         state: 'playing_to_target' | 'paused' | 'finishing'
     } | null = null;
 
+    public isFreeCam: boolean = false;
+    private freeRotX: number = 0;
+    private freeRotY: number = 0;
     private backup_speed: number = 10;
     public speed: number = 10;
     public jump_force: number = 10;
@@ -94,7 +100,7 @@ export class Player {
     private lastSentIsSprinting: boolean = false;
     private lastSentIsJumping: boolean = false;
     private readonly emitInterval: number = 15;
-    private readonly shootCooldownMs: number = 30;
+    private shootCooldownMs: number = 300;
     private lastShootTime: number = 0;
     private cameraDistance: number = 100;
     private targetCameraDistance: number = 100;
@@ -113,6 +119,7 @@ export class Player {
         this.hasController = props.hasController;
         this.maxHealth = props.maxHealth || 100;
         this.health = props.health || 100;
+        this.shootCooldownMs = props.shootCooldownMs ?? 300;
 
         this.playerGroup = new THREE.Group();
         this.cameraPivot = new THREE.Group();
@@ -135,6 +142,15 @@ export class Player {
         this.mesh.rotation.y = Math.PI;
         this.mesh.position.set(0, 0, 0);
         this.mesh.scale.set(10, 10, 10);
+
+
+        const boneHandSlotRight = data.model.getObjectByName("handslotr");
+        const position = boneHandSlotRight?.position.clone();
+        if (boneHandSlotRight && position) {
+            const { model, animations } = LoaderAssets.cloneTemplate(LoaderAssets.STAFF_TEMPLATE!);
+            model.position.copy(position);
+            boneHandSlotRight.add(model)
+        }
 
         this.mixer = new THREE.AnimationMixer(this.mesh);
         data.animations.forEach(clip => {
@@ -207,7 +223,9 @@ export class Player {
         pauseFor: number,
         speedBefore?: number,
         speedAfter?: number,
-        nextAnimation?: string
+        nextAnimation?: string,
+        onEventAt?: number,
+        onEvent?: () => void
     }) {
         const next = this.actions.get(name.toLowerCase());
         if (!next) return;
@@ -222,6 +240,9 @@ export class Player {
             pauseElapsed: 0,
             speedAfter: sequence.speedAfter ?? 1,
             nextAnimation: sequence.nextAnimation,
+            onEventAt: sequence.onEventAt,
+            onEvent: sequence.onEvent,
+            eventDone: false,
             state: 'playing_to_target'
         };
 
@@ -236,6 +257,14 @@ export class Player {
         if (!this.animationSequence || !this.currentAction) return;
 
         const seq = this.animationSequence;
+
+        if (seq.onEvent && !seq.eventDone && seq.onEventAt !== undefined) {
+            const currentPercent = this.currentAction.time / this.currentAction.getClip().duration;
+            if (currentPercent >= seq.onEventAt) {
+                seq.onEvent();
+                seq.eventDone = true;
+            }
+        }
 
         if (seq.state === 'playing_to_target') {
             if (this.currentAction.time >= seq.targetTime) {
@@ -430,6 +459,16 @@ export class Player {
 
     public updateRotation(deltaX: number, deltaY: number) {
         const sensitivity = 0.002;
+
+        if (this.isFreeCam) {
+            this.freeRotY -= deltaX * sensitivity;
+            this.freeRotX -= deltaY * sensitivity;
+            const maxPitch = Math.PI / 2 - 0.01;
+            this.freeRotX = Math.max(-maxPitch, Math.min(maxPitch, this.freeRotX));
+            this.render.camera.rotation.set(this.freeRotX, this.freeRotY, 0, 'YXZ');
+            return;
+        }
+
         this.rotY -= deltaX * sensitivity;
         this.rotX -= deltaY * sensitivity;
 
@@ -443,6 +482,13 @@ export class Player {
     private onKeyDown = (e: KeyboardEvent) => {
         if (this.isDead) return;
         const key = e.key.toLowerCase();
+
+        if (key === "tab") {
+            e.preventDefault();
+            this.toggleFreeCam();
+            return;
+        }
+
         if (key === "w") this.input_direction.forward = true;
         if (key === "s") this.input_direction.backward = true;
         if (key === "a") this.input_direction.left = true;
@@ -521,11 +567,31 @@ export class Player {
     }
 
     public shoot() {
-        if (this.isDead) return;
+        if (this.isDead || this.isAnimationLocked) return;
         const now = performance.now();
         if (now - this.lastShootTime < this.shootCooldownMs) return;
         this.lastShootTime = now;
 
+        this.render.socket.emit("player:animate", {
+            id: this.id,
+            animation: "Throw",
+            atPercent: 1.0,
+            pauseFor: 0,
+            speedBefore: 1.5,
+            speedAfter: 1.0
+        });
+
+        this.playAnimationSequence("Throw", {
+            atPercent: 1.0,
+            pauseFor: 0,
+            speedBefore: 1.5,
+            speedAfter: 1.0,
+            onEventAt: 0.5,
+            onEvent: () => this.performShootAction()
+        });
+    }
+
+    private performShootAction() {
         const radius = 3;
         const plr_pos = this.playerGroup.position.clone();
         const yaw = this.playerGroup.rotation.y;
@@ -578,6 +644,33 @@ export class Player {
         }
     }
 
+    private toggleFreeCam() {
+        this.isFreeCam = !this.isFreeCam;
+        if (this.isFreeCam) {
+            this.freeRotX = this.rotX;
+            this.freeRotY = this.rotY;
+            this.render.scene.attach(this.render.camera);
+        } else {
+            this.cameraPivot.add(this.render.camera);
+            this.render.camera.position.set(0, 0, this.cameraDistance);
+            this.render.camera.rotation.set(0, 0, 0);
+            this.render.camera.quaternion.set(0, 0, 0, 1);
+        }
+    }
+
+    private updateFreeCam(delta: number) {
+        const moveSpeed = (this.isSprinting ? 40 : 200) * delta;
+        const dir = new THREE.Vector3();
+        if (this.input_direction.forward) dir.z -= 1;
+        if (this.input_direction.backward) dir.z += 1;
+        if (this.input_direction.left) dir.x -= 1;
+        if (this.input_direction.right) dir.x += 1;
+
+        dir.normalize().multiplyScalar(moveSpeed);
+        dir.applyQuaternion(this.render.camera.quaternion);
+        this.render.camera.position.add(dir);
+    }
+
     public destroy() {
         this.leave();
         this.events.clear();
@@ -585,9 +678,29 @@ export class Player {
     }
 
     public update(delta: number) {
+        const controlled = this.render.players.find(p => p.hasController);
+        const globalFreeCam = !!controlled?.isFreeCam;
+
+        if (this.isFreeCam) {
+            this.updateFreeCam(delta);
+        }
+
         this.updateAnimationSequence(delta);
         this.mixer?.update(delta);
         this.uiLabel.updateUI(this.username, (this.health / this.maxHealth) * 100);
+
+        if (globalFreeCam) {
+            if (this.currentActionName !== "t-pose") {
+                this.playAnimation("T-Pose", { force: true });
+            }
+            return;
+        }
+
+        if (this.currentActionName === "t-pose" && !globalFreeCam) {
+            this.isAnimationLocked = false;
+            this.animationSequence = null;
+            this.playAnimation("Idle_A", { force: true });
+        }
 
         if (this.isSprinting) this.speed = this.backup_speed * 1.5;
         else this.speed = this.backup_speed;

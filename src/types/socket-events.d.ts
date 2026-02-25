@@ -6,3 +6,12 @@ export interface PlayerMoveData {
     isSprinting?: boolean;
     isJumping?: boolean;
 }
+
+export interface PlayerAnimateData {
+    id: string;
+    animation: string;
+    atPercent: number;
+    pauseFor: number;
+    speedBefore: number;
+    speedAfter: number;
+}

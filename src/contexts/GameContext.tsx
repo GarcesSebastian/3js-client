@@ -4,13 +4,13 @@ import { Render3JS } from "@/lib/render";
 import { useSocket } from "@/hooks/useSocket";
 import { v4 as uuidv4 } from "uuid";
 import Cookies from "js-cookie";
-import { PlayerStats } from "@/lib/instances/_game/player";
+import { Player, PlayerStats } from "@/lib/instances/_game/player";
 import { ProjectileProps } from "@/lib/instances/_game/projectile";
-import { PlayerMoveData } from "@/types/socket-events";
+import { PlayerAnimateData, PlayerMoveData } from "@/types/socket-events";
 
 interface GameContextProps {
     render: Render3JS | null;
-    players: PlayerStats[];
+    statsPlayers: PlayerStats[];
     initGame: (container: HTMLDivElement) => void;
     handleJoinGame: (username: string) => void;
     isLoaded: boolean;
@@ -21,7 +21,7 @@ export const GameContext = createContext<GameContextProps | null>(null);
 export const GameProvider = ({ children }: { children: ReactNode }) => {
     const { socket } = useSocket();
     const [render, setRender] = useState<Render3JS | null>(null);
-    const [players, setPlayers] = useState<PlayerStats[]>([]);
+    const [statsPlayers, setStatsPlayers] = useState<PlayerStats[]>([]);
     const [pendingPlayers, setPendingPlayers] = useState<PlayerStats[]>([]);
     const [isLoaded, setIsLoaded] = useState(false);
 
@@ -79,7 +79,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         render.room.join(player, (p) => {
             const stats = p.getStats();
             socket?.emit("player:join", stats);
-            setPlayers(prev => [...prev, stats]);
+            setStatsPlayers(prev => [...prev, stats]);
         });
     }, [render, socket]);
 
@@ -102,8 +102,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             speedBefore: 1.0,
             speedAfter: 1.0
         });
-
-        setPlayers(prev => [...prev, data]);
+        setStatsPlayers(prev => [...prev, data]);
     }, [render]);
 
     const handlePlayerJoin = useCallback((data: { players: PlayerStats[], projectiles: ProjectileProps[] }) => {
@@ -115,7 +114,8 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
                     hasController: false,
                 });
             });
-            setPlayers(prev => {
+
+            setStatsPlayers(prev => {
                 const uniquePlayers = [...prev];
                 data.players.filter(p => p && p.id).forEach(p => {
                     if (!uniquePlayers.find(up => up.id === p.id)) {
@@ -146,6 +146,19 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [render]);
 
+    const handlePlayerAnimated = useCallback((data: PlayerAnimateData) => {
+        if (!render) return;
+        const player = render.room.getPlayerById(data.id);
+        if (player) {
+            player.playAnimationSequence(data.animation, {
+                atPercent: data.atPercent,
+                pauseFor: data.pauseFor,
+                speedBefore: data.speedBefore,
+                speedAfter: data.speedAfter
+            });
+        }
+    }, [render]);
+
     const handleProjectileCreated = useCallback((data: ProjectileProps) => {
         if (!render) return;
         render.room.createProjectile(data, true);
@@ -159,14 +172,14 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
 
     const handleSocketConnectedClient = useCallback((data: { id: string, players: PlayerStats[], projectiles: ProjectileProps[] }) => {
         Cookies.set("SID_SKT", data.id);
-        setPlayers(data.players.filter(p => p && p.id));
+        setStatsPlayers(data.players.filter(p => p && p.id));
     }, [render]);
 
     const handlePlayerLeft = useCallback((data: { id: string, username: string }) => {
         if (!render) return;
         const player = render.room.getPlayerById(data.id);
         if (player) render.room.leave(player);
-        setPlayers(prev => prev.filter(p => p.id !== data.id));
+        setStatsPlayers(prev => prev.filter(p => p.id !== data.id));
     }, [render]);
 
     const handlePlayerHealth = useCallback((data: { id: string, health: number, maxHealth: number }) => {
@@ -174,7 +187,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         const player = render.room.getPlayerById(data.id);
         if (player) {
             player.setHealth(data.health);
-            setPlayers(prev => prev.map(p => p.id === data.id ? { ...p, health: data.health } : p));
+            setStatsPlayers(prev => prev.map(p => p.id === data.id ? { ...p, health: data.health } : p));
         }
     }, [render]);
 
@@ -196,7 +209,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
                     });
                 }
             });
-            setPlayers(prev => {
+            setStatsPlayers(prev => {
                 const uniquePlayers = [...prev];
                 pendingPlayers.filter(p => p && p.id).forEach(p => {
                     if (!uniquePlayers.find(up => up.id === p.id)) {
@@ -214,6 +227,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
         socket.on("player:join", handlePlayerJoin);
         socket.on("player:joined", handlePlayerJoined);
         socket.on("player:moved", handlePlayerMoved);
+        socket.on("player:animated", handlePlayerAnimated);
         socket.on("projectile:created", handleProjectileCreated);
         socket.on("projectile:died", handleProjectileDied);
         socket.on("socket:connected:client", handleSocketConnectedClient);
@@ -225,6 +239,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             socket.off("player:join", handlePlayerJoin);
             socket.off("player:joined", handlePlayerJoined);
             socket.off("player:moved", handlePlayerMoved);
+            socket.off("player:animated", handlePlayerAnimated);
             socket.off("projectile:created", handleProjectileCreated);
             socket.off("projectile:died", handleProjectileDied);
             socket.off("socket:connected:client", handleSocketConnectedClient);
@@ -235,7 +250,7 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
     }, [socket, handlePlayerJoin, handlePlayerJoined, handlePlayerMoved, handleProjectileCreated, handleProjectileDied, handlePlayerHealth, handlePlayerDied, handleSocketConnectedClient, handlePlayerLeft]);
 
     return (
-        <GameContext.Provider value={{ render, players, initGame, handleJoinGame, isLoaded }}>
+        <GameContext.Provider value={{ render, statsPlayers, initGame, handleJoinGame, isLoaded }}>
             {!isLoaded && (
                 <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black overflow-hidden font-sans select-none touch-none">
                     <div className="relative flex flex-col items-center gap-8 -translate-y-4">

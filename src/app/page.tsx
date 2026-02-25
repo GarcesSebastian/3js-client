@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useGame } from "@/hooks/useGame";
 
 export default function Home() {
-  const { initGame, handleJoinGame, players, render } = useGame();
+  const { initGame, handleJoinGame, statsPlayers, render } = useGame();
 
   const [gameJoined, setGameJoined] = useState(false);
   const [name, setName] = useState("");
@@ -255,10 +255,10 @@ export default function Home() {
             <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
               <div className="flex items-center justify-between mb-1 pb-1 border-b border-white/5">
                 <span className="text-[10px] font-bold text-gray-400">PLAYERS</span>
-                <span className="text-[10px] font-bold text-purple-400">{players.length}</span>
+                <span className="text-[10px] font-bold text-purple-400">{statsPlayers.length}</span>
               </div>
               <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto font-mono">
-                {players.map((plr) => (
+                {statsPlayers.map((plr) => (
                   <div key={plr?.id} className={`flex flex-col gap-1 px-1.5 py-1 ${plr?.username === name ? 'bg-white/10 rounded' : ''}`}>
                     <div className="flex items-center gap-1.5 ">
                       <div className={`w-1.5 h-1.5 rounded-full ${plr?.health > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
