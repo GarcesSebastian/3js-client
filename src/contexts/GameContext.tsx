@@ -81,6 +81,10 @@ export const GameProvider = ({ children }: { children: ReactNode }) => {
             socket?.emit("player:join", stats);
             setStatsPlayers(prev => [...prev, stats]);
         });
+
+        setTimeout(() => {
+            render.renderer.domElement.requestPointerLock();
+        }, 50);
     }, [render, socket]);
 
     const handlePlayerJoined = useCallback((data: PlayerStats) => {

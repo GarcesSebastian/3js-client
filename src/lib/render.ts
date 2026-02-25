@@ -58,9 +58,6 @@ export class Render3JS {
             document.body.style.cursor = "none";
         }
 
-        this.renderer.domElement.addEventListener("click", () => {
-            this.renderer.domElement.requestPointerLock();
-        });
 
         this.fpsCounter = document.createElement("div");
         this.fpsCounter.className = "fps-counter";

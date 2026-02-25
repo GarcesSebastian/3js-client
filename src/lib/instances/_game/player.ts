@@ -143,7 +143,6 @@ export class Player {
         this.mesh.position.set(0, 0, 0);
         this.mesh.scale.set(10, 10, 10);
 
-
         const boneHandSlotRight = data.model.getObjectByName("handslotr");
         const position = boneHandSlotRight?.position.clone();
         if (boneHandSlotRight && position) {
@@ -514,7 +513,14 @@ export class Player {
     };
 
     private onMouseDown = (e: MouseEvent) => {
+        if (e.target !== this.render.renderer.domElement) return;
         if (this.isDead) return;
+
+        if (document.pointerLockElement !== this.render.renderer.domElement) {
+            this.render.renderer.domElement.requestPointerLock();
+            return;
+        }
+
         if (e.button === 0) this.input_direction.shooting = true;
     };
 
@@ -523,6 +529,7 @@ export class Player {
     };
 
     private onWheel = (e: WheelEvent) => {
+        if (e.target !== this.render.renderer.domElement) return;
         this.targetCameraDistance += e.deltaY * this.zoomSpeed;
         this.targetCameraDistance = Math.max(this.minCameraDistance, Math.min(this.maxCameraDistance, this.targetCameraDistance));
     };
@@ -568,6 +575,8 @@ export class Player {
 
     public shoot() {
         if (this.isDead || this.isAnimationLocked) return;
+        if (document.pointerLockElement !== this.render.renderer.domElement) return;
+
         const now = performance.now();
         if (now - this.lastShootTime < this.shootCooldownMs) return;
         this.lastShootTime = now;
@@ -800,29 +809,24 @@ export class Player {
             this.input_direction.left || this.input_direction.right ||
             this.input_direction.joystickX !== 0 || this.input_direction.joystickY !== 0;
 
-        const isJumping = !this.isGrounded;
         const isSprinting = this.isSprinting;
+        const isJumping = isAirborne;
 
-        const stateChanged = isMoving !== this.lastSentIsMoving ||
-            isSprinting !== this.lastSentIsSprinting ||
-            isJumping !== this.lastSentIsJumping;
-
-        if (dist > 0.001 || rotDist > 0.001 || isAirborne || stateChanged) {
-            this.lastEmittedPosition.copy(pos);
-            this.lastEmittedRotationY = this.playerGroup.rotation.y;
-            this.lastEmitTime = now;
-            this.lastSentIsMoving = isMoving;
-            this.lastSentIsSprinting = isSprinting;
-            this.lastSentIsJumping = isJumping;
-
+        if (dist > 0.01 || rotDist > 0.01 || isMoving !== this.lastSentIsMoving || isSprinting !== this.lastSentIsSprinting || isJumping !== this.lastSentIsJumping) {
             this.events.emitMove({
                 position: { x: pos.x, y: pos.y, z: pos.z },
-                rotation: { x: 0, y: Number(this.rotY.toFixed(3)), z: 0 },
-                velocityY: this.velocityY,
+                rotation: { x: 0, y: this.playerGroup.rotation.y, z: 0 },
                 isMoving,
                 isSprinting,
                 isJumping
             });
+
+            this.lastEmittedPosition.copy(pos);
+            this.lastEmittedRotationY = this.playerGroup.rotation.y;
+            this.lastSentIsMoving = isMoving;
+            this.lastSentIsSprinting = isSprinting;
+            this.lastSentIsJumping = isJumping;
+            this.lastEmitTime = now;
         }
     }
 }
