@@ -21,6 +21,8 @@ export class LoaderAssets {
 
     public static STAFF_TEMPLATE: TemplatePayload | null = null;
 
+    public static CRATE_LONG_B_TEMPLATE: TemplatePayload | null = null;
+
     public static async preload(): Promise<void> {
         try {
             const [
@@ -30,7 +32,8 @@ export class LoaderAssets {
                 RANGER,
                 ROGUE,
                 ROGUE_HOODED,
-                STAFF
+                STAFF,
+                CRATE_LONG_B
             ] = await Promise.all([
                 LoaderAssets.load("/assets/characters/Knight.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Barbarian.glb", "gltf"),
@@ -38,7 +41,8 @@ export class LoaderAssets {
                 LoaderAssets.load("/assets/characters/Ranger.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Rogue.glb", "gltf"),
                 LoaderAssets.load("/assets/characters/Rogue_Hooded.glb", "gltf"),
-                LoaderAssets.load("/assets/weapons/Staff.glb", "gltf")
+                LoaderAssets.load("/assets/weapons/Staff.glb", "gltf"),
+                LoaderAssets.load("/assets/decoration/Crate_Long_B.glb", "gltf")
             ]);
 
             LoaderAssets.KNIGHT_TEMPLATE = KNIGHT;
@@ -48,6 +52,7 @@ export class LoaderAssets {
             LoaderAssets.ROGUE_TEMPLATE = ROGUE;
             LoaderAssets.ROGUE_HOODED_TEMPLATE = ROGUE_HOODED;
             LoaderAssets.STAFF_TEMPLATE = STAFF;
+            LoaderAssets.CRATE_LONG_B_TEMPLATE = CRATE_LONG_B;
         } catch (error) {
             console.error("Error preloading assets:", error);
         }

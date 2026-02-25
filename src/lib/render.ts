@@ -109,6 +109,11 @@ export class Render3JS {
         base.model.scale.set(100, 1, 100);
         this.scene.add(base.model);
 
+        const crateLongB = LoaderAssets.cloneTemplate(LoaderAssets.CRATE_LONG_B_TEMPLATE!);
+        crateLongB.model.position.set(30, 0, -30);
+        crateLongB.model.scale.set(100, 100, 100);
+        this.scene.add(crateLongB.model);
+
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         this.scene.add(ambientLight);
 
