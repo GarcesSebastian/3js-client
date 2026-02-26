@@ -1,3 +1,5 @@
+import { Player } from "../instances/_game/player";
+
 export type MoveEventData = {
     position: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
@@ -13,11 +15,14 @@ export type HealthEventData = {
     percentage: number;
 };
 
+export type changeCharacterEventData = Player;
+
 export class PlayerEvents {
     private onMoveCallbacks: ((data: MoveEventData) => void)[] = [];
     private onJumpingCallbacks: (() => void)[] = [];
     private onDeathCallbacks: (() => void)[] = [];
     private onHealthCallbacks: ((data: HealthEventData) => void)[] = [];
+    private onChangeCharacterCallbacks: ((data: changeCharacterEventData) => void)[] = [];
 
     public onMove(callback: (data: MoveEventData) => void) {
         this.onMoveCallbacks.push(callback);
@@ -33,6 +38,10 @@ export class PlayerEvents {
 
     public onHealth(callback: (data: HealthEventData) => void) {
         this.onHealthCallbacks.push(callback);
+    }
+
+    public onChangeCharacter(callback: (data: changeCharacterEventData) => void) {
+        this.onChangeCharacterCallbacks.push(callback);
     }
 
     public emitMove(data: MoveEventData) {
@@ -51,10 +60,15 @@ export class PlayerEvents {
         this.onHealthCallbacks.forEach(cb => cb(data));
     }
 
+    public emitChangeCharacter(data: changeCharacterEventData) {
+        this.onChangeCharacterCallbacks.forEach(cb => cb(data));
+    }
+
     public clear() {
         this.onMoveCallbacks = [];
         this.onJumpingCallbacks = [];
         this.onDeathCallbacks = [];
         this.onHealthCallbacks = [];
+        this.onChangeCharacterCallbacks = [];
     }
 }

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { Render3JS } from "../../render";
 import { WorldText } from "../_ui/WorldText";
 import { PlayerEvents } from "../../events/PlayerEvents";
-import { LoaderAssets } from "../../helpers/LoaderAssets";
+import { LoaderAssets, TemplatePayload } from "../../helpers/LoaderAssets";
 import { v4 as uuidv4 } from "uuid";
 
 export interface PlayerStats {
@@ -44,6 +44,7 @@ export class Player {
     private mixer: THREE.AnimationMixer | null = null;
     private currentAction: THREE.AnimationAction | null = null;
     private actions: Map<string, THREE.AnimationAction> = new Map();
+    private animations: THREE.AnimationClip[] = [];
 
     public events: PlayerEvents = new PlayerEvents();
     private isAnimationLocked: boolean = false;
@@ -136,32 +137,7 @@ export class Player {
             this.rotY = props.rotation.y;
         }
 
-        const { name, data } = props.meshName ? LoaderAssets.getPlayerByName(props.meshName) : LoaderAssets.randomPlayer();
-        this.meshName = name;
-        this.mesh = data.model;
-        this.mesh.rotation.y = Math.PI;
-        this.mesh.position.set(0, 0, 0);
-        this.mesh.scale.set(10, 10, 10);
-
-        const boneHandSlotRight = data.model.getObjectByName("handslotr");
-        const position = boneHandSlotRight?.position.clone();
-        if (boneHandSlotRight && position) {
-            const { model, animations } = LoaderAssets.cloneTemplate(LoaderAssets.STAFF_TEMPLATE!);
-            model.position.copy(position);
-            boneHandSlotRight.add(model)
-        }
-
-        this.mixer = new THREE.AnimationMixer(this.mesh);
-        data.animations.forEach(clip => {
-            const name = clip.name.toLowerCase();
-            const action = this.mixer!.clipAction(clip);
-            action.clampWhenFinished = true;
-            this.actions.set(name, action);
-        });
-
-        this.buildCollider();
-
-        this.playerGroup.add(this.mesh);
+        this.loadPlayerCharacterModel(LoaderAssets.TEMPLATES.CHARACTERS["Mage"])
 
         this.uiLabel = new WorldText(this.username);
         this.uiLabel.sprite.position.y = this.colliderSize.y + 10;
@@ -180,6 +156,36 @@ export class Player {
 
         this.render.scene.add(this.playerGroup);
         this.updateWireframe();
+    }
+
+    public loadPlayerCharacterModel(template: TemplatePayload) {
+        this.meshName = template.name;
+        this.mesh = template.model;
+        this.mesh.rotation.y = Math.PI;
+        this.mesh.position.set(0, 0, 0);
+        this.mesh.scale.set(10, 10, 10);
+
+        const boneHandSlotRight = this.mesh.getObjectByName("handslotr");
+        const position = boneHandSlotRight?.position.clone();
+        if (boneHandSlotRight && position) {
+            const { model, animations } = LoaderAssets.cloneTemplate(LoaderAssets.TEMPLATES.WEAPONS["Staff"]);
+            model.position.copy(position);
+            boneHandSlotRight.add(model)
+        }
+
+        this.mixer = new THREE.AnimationMixer(this.mesh);
+        template.animations.forEach(clip => {
+            const name = clip.name.toLowerCase();
+            const action = this.mixer!.clipAction(clip);
+            action.clampWhenFinished = true;
+            this.actions.set(name, action);
+        });
+
+        this.buildCollider();
+        this.playerGroup.add(this.mesh);
+        this.animations = template.animations;
+
+        this.events.emitChangeCharacter(this);
     }
 
     public playAnimation(name: string, options: {
@@ -330,6 +336,10 @@ export class Player {
             center: { x: center.x, y: center.y, z: center.z },
             size: { x: this.colliderSize.x, y: this.colliderSize.y, z: this.colliderSize.z }
         };
+    }
+
+    public getAnimations() {
+        return this.animations;
     }
 
     public takeDamage(amount: number) {
@@ -495,6 +505,8 @@ export class Player {
         if (key === " " && !this.input_direction.jumpRequested) this.input_direction.jumpRequested = true;
         if (key === "f") this.input_direction.shooting = true;
         if (key === "shift") this.run();
+
+        if (key === "c") this.changeCharacter(LoaderAssets.TEMPLATES.CHARACTERS["Rogue_Hooded"]);
     };
 
     private onKeyUp = (e: KeyboardEvent) => {
@@ -541,6 +553,23 @@ export class Player {
         window.addEventListener("mousedown", this.onMouseDown);
         window.addEventListener("mouseup", this.onMouseUp);
         window.addEventListener("wheel", this.onWheel);
+    }
+
+    public changeCharacter(template_character: TemplatePayload) {
+        if (!template_character) throw new Error("Template character is not defined");
+        const template_character_cloned = LoaderAssets.cloneTemplate(template_character);
+
+        this.mesh.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.geometry.dispose();
+                if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
+                else mesh.material.dispose();
+            }
+        })
+
+        this.playerGroup.remove(this.mesh);
+        this.loadPlayerCharacterModel(template_character_cloned);
     }
 
     public jump() {

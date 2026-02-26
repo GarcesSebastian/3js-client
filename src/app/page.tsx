@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGame } from "@/hooks/useGame";
+import { Player } from "@/lib/instances/_game/player";
 
 export default function Home() {
   const { initGame, handleJoinGame, statsPlayers, render } = useGame();
@@ -19,6 +20,7 @@ export default function Home() {
   const [messages, setMessages] = useState<{ name: string; content: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(true);
+  const [animations, setAnimations] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const lookState = useRef({ active: false, id: -1, lastX: 0, lastY: 0 });
 
@@ -43,6 +45,9 @@ export default function Home() {
     if (!name.trim()) return alert("Ingresa un nombre.");
     handleJoinGame(name);
     setGameJoined(true);
+    render?.room.getPlayers().find(p => p.hasController)?.getAnimations().forEach(a => {
+      setAnimations(prev => [...prev, a.name]);
+    });
   };
 
   const handleRespawn = useCallback(() => {
@@ -60,6 +65,10 @@ export default function Home() {
     }
   }, [render]);
 
+  const handleChangeCharacter = useCallback((player: Player) => {
+    setAnimations(player.getAnimations().map(a => a.name));
+  }, []);
+
   useEffect(() => {
     if (!render) return;
     const player = render.room.getPlayers().find(p => p.hasController);
@@ -71,6 +80,7 @@ export default function Home() {
     };
 
     player.events.onDeath(onDeath);
+    player.events.onChangeCharacter(handleChangeCharacter);
   }, [render, gameJoined]);
 
   useEffect(() => {
@@ -299,6 +309,12 @@ export default function Home() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="absolute bottom-5 right-5 flex flex-col gap-1 overflow-y-auto">
+            {animations.map((a) => {
+              return (<span key={a} className="text-[10px] font-bold text-white">{a}</span>)
+            })}
           </div>
 
           <div

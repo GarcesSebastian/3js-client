@@ -3,7 +3,13 @@ import { GLTFLoader, OBJLoader } from "three/examples/jsm/Addons.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 
 export type TypeLoad = "gltf" | "obj"
+
+export type TemplateCharacters = "Barbarian" | "Knight" | "Mage" | "Ranger" | "Rogue" | "Rogue_Hooded";
+export type TemplateWeapons = "Staff";
+export type TemplateDecorations = "Crate_Long_B";
+
 export interface TemplatePayload {
+    name: string;
     model: THREE.Group;
     animations: THREE.AnimationClip[];
 }
@@ -12,16 +18,15 @@ export class LoaderAssets {
     private static obj_loader: OBJLoader = new OBJLoader();
     private static gltf_loader: GLTFLoader = new GLTFLoader();
 
-    public static KNIGHT_TEMPLATE: TemplatePayload | null = null;
-    public static BARBARIAN_TEMPLATE: TemplatePayload | null = null;
-    public static MAGE_TEMPLATE: TemplatePayload | null = null;
-    public static RANGER_TEMPLATE: TemplatePayload | null = null;
-    public static ROGUE_HOODED_TEMPLATE: TemplatePayload | null = null;
-    public static ROGUE_TEMPLATE: TemplatePayload | null = null;
-
-    public static STAFF_TEMPLATE: TemplatePayload | null = null;
-
-    public static CRATE_LONG_B_TEMPLATE: TemplatePayload | null = null;
+    public static TEMPLATES: {
+        CHARACTERS: Record<TemplateCharacters, TemplatePayload>,
+        WEAPONS: Record<TemplateWeapons, TemplatePayload>,
+        DECORATIONS: Record<TemplateDecorations, TemplatePayload>
+    } = {
+            CHARACTERS: {} as Record<TemplateCharacters, TemplatePayload>,
+            WEAPONS: {} as Record<TemplateWeapons, TemplatePayload>,
+            DECORATIONS: {} as Record<TemplateDecorations, TemplatePayload>
+        };
 
     public static async preload(): Promise<void> {
         try {
@@ -45,49 +50,41 @@ export class LoaderAssets {
                 LoaderAssets.load("/assets/decoration/Crate_Long_B.glb", "gltf")
             ]);
 
-            LoaderAssets.KNIGHT_TEMPLATE = KNIGHT;
-            LoaderAssets.BARBARIAN_TEMPLATE = BARBARIAN;
-            LoaderAssets.MAGE_TEMPLATE = MAGE;
-            LoaderAssets.RANGER_TEMPLATE = RANGER;
-            LoaderAssets.ROGUE_TEMPLATE = ROGUE;
-            LoaderAssets.ROGUE_HOODED_TEMPLATE = ROGUE_HOODED;
-            LoaderAssets.STAFF_TEMPLATE = STAFF;
-            LoaderAssets.CRATE_LONG_B_TEMPLATE = CRATE_LONG_B;
+            LoaderAssets.TEMPLATES = {
+                CHARACTERS: {
+                    "Knight": { name: "Knight", model: KNIGHT.model, animations: KNIGHT.animations },
+                    "Barbarian": { name: "Barbarian", model: BARBARIAN.model, animations: BARBARIAN.animations },
+                    "Mage": { name: "Mage", model: MAGE.model, animations: MAGE.animations },
+                    "Ranger": { name: "Ranger", model: RANGER.model, animations: RANGER.animations },
+                    "Rogue": { name: "Rogue", model: ROGUE.model, animations: ROGUE.animations },
+                    "Rogue_Hooded": { name: "Rogue Hooded", model: ROGUE_HOODED.model, animations: ROGUE_HOODED.animations },
+                },
+                WEAPONS: {
+                    "Staff": { name: "Staff", model: STAFF.model, animations: STAFF.animations },
+                },
+                DECORATIONS: {
+                    "Crate_Long_B": { name: "Crate Long B", model: CRATE_LONG_B.model, animations: CRATE_LONG_B.animations }
+                }
+            };
         } catch (error) {
             console.error("Error preloading assets:", error);
         }
     }
 
-    public static getPlayerByName(name: string): { name: string, data: TemplatePayload } {
-        const templates = [
-            { name: "Knight", model: LoaderAssets.KNIGHT_TEMPLATE },
-            { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
-            { name: "Mage", model: LoaderAssets.MAGE_TEMPLATE },
-            { name: "Ranger", model: LoaderAssets.RANGER_TEMPLATE },
-            { name: "Rogue", model: LoaderAssets.ROGUE_TEMPLATE },
-            { name: "Rogue Hooded", model: LoaderAssets.ROGUE_HOODED_TEMPLATE }
-        ];
+    public static getPlayerByName(name: TemplateCharacters): TemplatePayload {
+        const template = LoaderAssets.TEMPLATES.CHARACTERS[name];
+        if (!template) return { name: "Unknown", model: new THREE.Group(), animations: [] };
 
-        const template = templates.find(t => t.name === name);
-        if (!template) return { name: "Unknown", data: { model: new THREE.Group(), animations: [] } };
-
-        return { name: template.name, data: this.cloneTemplate(template.model!) };
+        return this.cloneTemplate(template);
     }
 
-    public static randomPlayer(): { name: string, data: TemplatePayload } {
-        const templates = [
-            { name: "Knight", model: LoaderAssets.KNIGHT_TEMPLATE },
-            { name: "Barbarian", model: LoaderAssets.BARBARIAN_TEMPLATE },
-            { name: "Mage", model: LoaderAssets.MAGE_TEMPLATE },
-            { name: "Ranger", model: LoaderAssets.RANGER_TEMPLATE },
-            { name: "Rogue", model: LoaderAssets.ROGUE_TEMPLATE },
-            { name: "Rogue Hooded", model: LoaderAssets.ROGUE_HOODED_TEMPLATE }
-        ];
+    public static randomCharacter(): TemplatePayload {
+        const keys = Object.keys(LoaderAssets.TEMPLATES.CHARACTERS);
+        const option = keys[Math.floor(Math.random() * keys.length)] as TemplateCharacters;
+        const template = LoaderAssets.TEMPLATES.CHARACTERS[option];
+        if (!template) return { name: "Unknown", model: new THREE.Group(), animations: [] };
 
-        const template = templates[Math.floor(Math.random() * templates.length)];
-        if (!template) return { name: "Unknown", data: { model: new THREE.Group(), animations: [] } };
-
-        return { name: template.name, data: this.cloneTemplate(template.model!) };
+        return template;
     }
 
     public static cloneTemplate(template: TemplatePayload): TemplatePayload {
@@ -105,12 +102,13 @@ export class LoaderAssets {
         });
 
         return {
+            name: template.name,
             model: clone,
             animations: template.animations
         };
     }
 
-    public static async load(source: string, type: TypeLoad): Promise<TemplatePayload> {
+    public static async load(source: string, type: TypeLoad): Promise<Omit<TemplatePayload, "name">> {
         if (type == "gltf") {
             return await this.loadGLTF(source);
         }
@@ -125,11 +123,10 @@ export class LoaderAssets {
         };
     }
 
-    private static loadGLTF(source: string): Promise<TemplatePayload> {
+    private static loadGLTF(source: string): Promise<Omit<TemplatePayload, "name">> {
         return new Promise((resolve, reject) => {
             LoaderAssets.gltf_loader.load(source, (gltf) => {
                 const model = gltf.scene;
-                console.log(source.split("/").pop(), gltf.animations)
                 model.traverse((child) => {
                     if ((child as THREE.Mesh).isMesh) {
                         const mesh = child as THREE.Mesh;
@@ -156,7 +153,7 @@ export class LoaderAssets {
         });
     }
 
-    private static loadObj(source: string): Promise<TemplatePayload> {
+    private static loadObj(source: string): Promise<Omit<TemplatePayload, "name">> {
         return new Promise((resolve, reject) => {
             LoaderAssets.obj_loader.load(source, (object) => {
                 object.traverse((child) => {
